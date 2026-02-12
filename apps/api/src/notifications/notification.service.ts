@@ -1,0 +1,41 @@
+import { insertNotificationEvent, insertNotifications } from "./notification.repo";
+import type { UserRole } from "../users/user.repo";
+import { listUsersByRoles } from "../users/user.repo";
+
+type NotifyRolesInput = {
+  roles: UserRole[];
+  type: string;
+  title: string;
+  body: string;
+  severity?: "info" | "warning" | "critical";
+  entityType: string;
+  entityId?: string;
+  ctaUrl?: string;
+  metadata?: Record<string, unknown>;
+};
+
+export async function notifyRoles(input: NotifyRolesInput) {
+  const recipients = (await listUsersByRoles(input.roles)) as Array<{ id: string }>;
+  const severity = input.severity ?? "info";
+
+  await insertNotificationEvent({
+    eventType: input.type,
+    entityType: input.entityType,
+    entityId: input.entityId,
+    payload: input.metadata
+  });
+
+  return insertNotifications(
+    recipients.map((user) => ({
+      recipientUserId: user.id,
+      type: input.type,
+      title: input.title,
+      body: input.body,
+      severity,
+      entityType: input.entityType,
+      entityId: input.entityId,
+      ctaUrl: input.ctaUrl,
+      metadata: input.metadata
+    }))
+  );
+}
