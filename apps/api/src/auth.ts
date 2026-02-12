@@ -7,6 +7,16 @@ import * as schema from "./db/schema";
 export const auth = betterAuth({
   secret: config.betterAuthSecret,
   baseURL: config.betterAuthUrl,
+  trustedOrigins: [
+    config.webUrl,
+    "http://localhost:5173",
+    "http://127.0.0.1:5173"
+  ],
+  advanced: {
+    database: {
+      generateId: "uuid"
+    }
+  },
   database: drizzleAdapter(db, {
     provider: "pg",
     schema: {
@@ -26,7 +36,7 @@ export const auth = betterAuth({
     fields: {
       name: "name",
       email: "email",
-      emailVerified: "email_verified",
+      emailVerified: "emailVerified",
       image: "image"
     },
     additionalFields: {

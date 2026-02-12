@@ -9,6 +9,9 @@
     "start": "node dist/index.js",
     "lint": "echo \"No lint configured\"",
     "typecheck": "tsc -p tsconfig.json --noEmit",
+    "db:seed": "tsx src/seed.ts",
+    "db:seed:stages": "tsx src/seed-lead-stages.ts",
+    "db:seed:instruments": "tsx src/seed-instruments.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push"

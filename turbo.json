@@ -1,9 +1,11 @@
 {
   "$schema": "https://turbo.build/schema.json",
-  "pipeline": {
+  "ui": "tui",
+  "tasks": {
     "dev": {
       "cache": false,
-      "persistent": true
+      "persistent": true,
+      "interactive": true
     },
     "build": {
       "dependsOn": ["^build"],
