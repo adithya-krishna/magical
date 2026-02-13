@@ -41,7 +41,9 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { authClient } from "@/lib/auth-client"
+import { CoursePlansTab } from "@/pages/courses/course-plans-tab"
 import { CourseDetailsSheet } from "@/pages/courses/course-details-sheet"
 import { CourseFormSheet } from "@/pages/courses/course-form-sheet"
 import type {
@@ -386,15 +388,22 @@ export function CoursesPage() {
         ) : null}
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Course catalog</CardTitle>
-          <CardDescription>
-            Manage instruments in <Link to="/instruments" className="underline">Instruments</Link>.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-5">
+      <Tabs defaultValue="catalog" className="space-y-4">
+        <TabsList>
+          <TabsTrigger value="catalog">Catalog</TabsTrigger>
+          <TabsTrigger value="plans">Course Plans</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="catalog">
+          <Card>
+            <CardHeader>
+              <CardTitle>Course catalog</CardTitle>
+              <CardDescription>
+                Manage instruments in <Link to="/instruments" className="underline">Instruments</Link>.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-5">
             <Input
               placeholder="Search by course name"
               value={searchInput}
@@ -458,78 +467,84 @@ export function CoursesPage() {
                 </SelectContent>
               </Select>
             </div>
-          </div>
+              </div>
 
-          <div className="rounded-md border">
-            <Table>
-              <TableHeader>
-                {table.getHeaderGroups().map((headerGroup) => (
-                  <TableRow key={headerGroup.id}>
-                    {headerGroup.headers.map((header) => (
-                      <TableHead key={header.id}>
-                        {header.isPlaceholder
-                          ? null
-                          : flexRender(header.column.columnDef.header, header.getContext())}
-                      </TableHead>
+              <div className="rounded-md border">
+                <Table>
+                  <TableHeader>
+                    {table.getHeaderGroups().map((headerGroup) => (
+                      <TableRow key={headerGroup.id}>
+                        {headerGroup.headers.map((header) => (
+                          <TableHead key={header.id}>
+                            {header.isPlaceholder
+                              ? null
+                              : flexRender(header.column.columnDef.header, header.getContext())}
+                          </TableHead>
+                        ))}
+                      </TableRow>
                     ))}
-                  </TableRow>
-                ))}
-              </TableHeader>
-              <TableBody>
-                {table.getRowModel().rows.length ? (
-                  table.getRowModel().rows.map((row) => (
-                    <TableRow
-                      key={row.id}
-                      className="cursor-pointer"
-                      onClick={() => {
-                        setSelectedCourseId(row.original.id)
-                        setDetailsOpen(true)
-                      }}
-                    >
-                      {row.getVisibleCells().map((cell) => (
-                        <TableCell key={cell.id}>
-                          {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                  </TableHeader>
+                  <TableBody>
+                    {table.getRowModel().rows.length ? (
+                      table.getRowModel().rows.map((row) => (
+                        <TableRow
+                          key={row.id}
+                          className="cursor-pointer"
+                          onClick={() => {
+                            setSelectedCourseId(row.original.id)
+                            setDetailsOpen(true)
+                          }}
+                        >
+                          {row.getVisibleCells().map((cell) => (
+                            <TableCell key={cell.id}>
+                              {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                            </TableCell>
+                          ))}
+                        </TableRow>
+                      ))
+                    ) : (
+                      <TableRow>
+                        <TableCell colSpan={columns.length} className="h-24 text-center text-muted-foreground">
+                          {coursesQuery.isLoading ? "Loading..." : "No courses found."}
                         </TableCell>
-                      ))}
-                    </TableRow>
-                  ))
-                ) : (
-                  <TableRow>
-                    <TableCell colSpan={columns.length} className="h-24 text-center text-muted-foreground">
-                      {coursesQuery.isLoading ? "Loading..." : "No courses found."}
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </div>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
 
-          <div className="flex items-center justify-between text-sm">
-            <span className="text-muted-foreground">Total {total} courses</span>
-            <div className="flex items-center gap-2">
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => setPage((prev) => Math.max(1, prev - 1))}
-                disabled={page <= 1}
-              >
-                Previous
-              </Button>
-              <span>
-                Page {page} of {totalPages}
-              </span>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))}
-                disabled={page >= totalPages}
-              >
-                Next
-              </Button>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-muted-foreground">Total {total} courses</span>
+                <div className="flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setPage((prev) => Math.max(1, prev - 1))}
+                    disabled={page <= 1}
+                  >
+                    Previous
+                  </Button>
+                  <span>
+                    Page {page} of {totalPages}
+                  </span>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))}
+                    disabled={page >= totalPages}
+                  >
+                    Next
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="plans">
+          <CoursePlansTab canManage={canManage} />
+        </TabsContent>
+      </Tabs>
 
       <CourseFormSheet
         open={formOpen}

@@ -1,11 +1,15 @@
 import { Link, useLocation } from "@tanstack/react-router"
-import { BookOpen, Guitar, LayoutDashboard, Settings2, Users } from "lucide-react"
+import { BookOpen, CircleCheckBig, Guitar, LayoutDashboard, Presentation, Settings2, Users } from "lucide-react"
 import { NavMain } from "@/components/navigation/nav-main"
 import { NavUser } from "@/components/navigation/nav-user"
+import { canViewUserList, type AppRole } from "@/lib/users-rbac"
 import {
   Sidebar,
   SidebarContent,
   SidebarFooter,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
@@ -13,6 +17,8 @@ import {
 } from "@/components/ui/sidebar"
 
 type SidebarUser = {
+  id: string
+  role?: string | null
   email: string
   name?: string | null
   image?: string | null
@@ -30,6 +36,16 @@ const navItems = [
     icon: Users,
   },
   {
+    title: "Admissions",
+    to: "/admissions",
+    icon: CircleCheckBig,
+  },
+  {
+    title: "Classroom",
+    to: "/classroom",
+    icon: Presentation,
+  },
+  {
     title: "Courses",
     to: "/courses",
     icon: BookOpen,
@@ -43,6 +59,13 @@ const navItems = [
 
 export function AppSidebar({ user }: { user: SidebarUser }) {
   const pathname = useLocation({ select: (location) => location.pathname })
+  const appRole = (user.role ?? "student") as AppRole
+  const showStudentsList = canViewUserList(appRole, "student")
+  const showTeachersList = canViewUserList(appRole, "teacher")
+  const showStaffList = canViewUserList(appRole, "staff")
+  const showAdminsList = canViewUserList(appRole, "admin")
+  const canViewAdmissions = appRole === "super_admin" || appRole === "admin" || appRole === "staff"
+  const canViewClassroom = appRole === "super_admin" || appRole === "admin" || appRole === "staff"
 
   return (
     <Sidebar variant="inset" collapsible="icon">
@@ -65,7 +88,130 @@ export function AppSidebar({ user }: { user: SidebarUser }) {
       </SidebarHeader>
 
       <SidebarContent>
-        <NavMain items={[...navItems]} />
+        <NavMain
+          items={navItems.filter((item) => {
+            if (item.to === "/admissions") {
+              return canViewAdmissions
+            }
+            if (item.to === "/classroom") {
+              return canViewClassroom
+            }
+            return true
+          })}
+        />
+
+        <SidebarGroup>
+          <SidebarGroupLabel>Users</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {canViewUserList(appRole, "student") ? (
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild isActive={pathname.startsWith("/users/students")}>
+                    <Link to="/users/students">
+                      <Users />
+                      <span>Students</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ) : null}
+
+              {!showStudentsList && appRole === "student" ? (
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    asChild
+                    isActive={pathname.startsWith(`/users/students/${user.id}`)}
+                  >
+                    <Link
+                      to="/users/students/$id/$tab"
+                      params={{ id: user.id, tab: "profile" }}
+                    >
+                      <Users />
+                      <span>My Student Profile</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ) : null}
+
+              {canViewUserList(appRole, "teacher") ? (
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild isActive={pathname.startsWith("/users/teachers")}>
+                    <Link to="/users/teachers">
+                      <Users />
+                      <span>Teachers</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ) : null}
+
+              {!showTeachersList && appRole === "teacher" ? (
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    asChild
+                    isActive={pathname.startsWith(`/users/teachers/${user.id}`)}
+                  >
+                    <Link
+                      to="/users/teachers/$id/$tab"
+                      params={{ id: user.id, tab: "profile" }}
+                    >
+                      <Users />
+                      <span>My Teacher Profile</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ) : null}
+
+              {canViewUserList(appRole, "staff") ? (
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild isActive={pathname.startsWith("/users/staff")}>
+                    <Link to="/users/staff">
+                      <Users />
+                      <span>Staff</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ) : null}
+
+              {!showStaffList && appRole === "staff" ? (
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    asChild
+                    isActive={pathname.startsWith(`/users/staff/${user.id}`)}
+                  >
+                    <Link to="/users/staff/$id/$tab" params={{ id: user.id, tab: "profile" }}>
+                      <Users />
+                      <span>My Staff Profile</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ) : null}
+
+              {canViewUserList(appRole, "admin") ? (
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild isActive={pathname.startsWith("/users/admins")}>
+                    <Link to="/users/admins">
+                      <Users />
+                      <span>Admins</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ) : null}
+
+              {!showAdminsList && appRole === "admin" ? (
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    asChild
+                    isActive={pathname.startsWith(`/users/admins/${user.id}`)}
+                  >
+                    <Link to="/users/admins/$id/$tab" params={{ id: user.id, tab: "profile" }}>
+                      <Users />
+                      <span>My Admin Profile</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ) : null}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
       </SidebarContent>
 
       <SidebarFooter>

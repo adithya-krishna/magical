@@ -13,7 +13,7 @@ const requestSchema = z.object({
   firstName: z.string().min(1),
   lastName: z.string().min(1),
   phone: z.string().optional(),
-  roleRequested: z.enum(["admin", "staff", "teacher", "student"])
+  roleRequested: z.enum(["admin", "staff", "teacher"])
 });
 
 accessRequestsRouter.post("/", async (req, res) => {

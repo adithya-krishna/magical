@@ -11,7 +11,10 @@ Convert a lead into a student admission by selecting a course duration and creat
 
 ## UI scope
 - Admissions list with filters and pagination.
-- Create admission flow starting from a lead (either from Leads page or Admissions page).
+- Admissions list supports search by lead name, phone, and email.
+- Create admission flow with dual intake modes:
+  - From lead (default): select an onboarded lead.
+  - Walk-in student: create student + admission in one flow.
 - Edit admission details: duration plan, discount, extra classes, notes.
 - Select weekly class slots (day/time) and start date.
 - Show computed totals (base classes + extra classes - discount).
@@ -59,9 +62,12 @@ AdmissionAuditEvent
 - createdAt
 
 ## Admissions workflow
-- Admission can only be created from a lead in an onboarded stage.
+- Admission can only be created from a non-onboarded lead; successful creation transitions the lead to an onboarded stage.
+- Walk-in admissions are supported by creating a system-generated onboarded lead during admission creation.
 - Once created, the lead is marked as onboarded (if not already).
-- Optionally create a student profile immediately or defer.
+- Student profile can be linked in either mode:
+  - From lead: optional `studentId` if already provisioned.
+  - Walk-in: student account is created inline before admission transaction.
 - During creation, enforce classroom slot capacity (hard block on full slots).
 - Auto-assign a fixed teacher and classroom slot per selected weekly slot.
 - Pre-generate attendance dates for the full plan duration.
@@ -85,6 +91,7 @@ AdmissionAuditEvent
 ## API endpoints (v1)
 Admissions
 - GET `/api/v1/admissions` with pagination and filters
+- GET `/api/v1/admissions/prerequisites?courseId=...&leadSearch=...`
 - GET `/api/v1/admissions/:id`
 - POST `/api/v1/admissions`
 - PATCH `/api/v1/admissions/:id`
@@ -92,12 +99,23 @@ Admissions
 
 Course plans
 - GET `/api/v1/course-plans`
+- GET `/api/v1/course-plans/:id`
 - POST `/api/v1/course-plans` (admin+)
 - PATCH `/api/v1/course-plans/:id` (admin+)
 - DELETE `/api/v1/course-plans/:id` (admin+)
 
+Course plan pricing
+- Store `price` as integer minor units (paise).
+- UI displays rupees by dividing by 100 and formatting to 2 decimal places.
+
 Lead linkage
-- GET `/api/v1/leads?stage=isOnboarded` (for selection)
+- GET `/api/v1/lead-stages` then filter `isOnboarded=true`
+- GET `/api/v1/leads?stageId=...` for each onboarded stage
+
+Walk-in intake
+- POST `/api/v1/admissions` with `walkInStudent` payload:
+  - `firstName`, `lastName`, `email`, `phone?`, `password`
+- Duplicate student emails are blocked with `409`.
 
 Classroom assignment (used during admission)
 - GET `/api/v1/operating-days`
@@ -116,6 +134,8 @@ Classroom assignment (used during admission)
 ## FE behaviors
 - Admission create form pulls course plans and precomputes total classes.
 - Admission create form requires weekly slot selection before submit.
+- Admission create form supports mode switch (`from lead` or `walk-in`).
+- In walk-in mode, require student identity + temporary password.
 - Show summary: base classes, extra classes, final classes.
 - When admission is created, show a toast with quick link to Student profile creation.
 

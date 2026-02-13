@@ -1,17 +1,24 @@
 import { AppError } from "../common/errors";
+import { auth } from "../auth";
 import type { AuthUser } from "../middleware/auth";
+import { upsertUserProfile } from "../users/users-management.repo";
 import {
   countActiveEnrollments,
+  createLeadForAdmission,
   createAdmissionTransaction,
   getAdmissionById,
   getAdmissionWithLead,
   getClassroomSlotsForCourse,
   getCoursePlanById,
   getLeadWithStage,
+  getOnboardedLeadStage,
   getOperatingDaysByWeekdays,
   getTimeSlotTemplates,
+  listAdmissionPrerequisites,
   getUserById,
+  getUserByEmail,
   listAdmissions,
+  setLeadStage,
   softDeleteAdmission,
   updateAdmission
 } from "./admission.repo";
@@ -20,6 +27,7 @@ import type {
   AdmissionListFilters,
   AdmissionUpdateInput,
   DiscountType,
+  WalkInStudentInput,
   WeeklySlotInput
 } from "./admission.types";
 
@@ -75,6 +83,130 @@ function ensureStaffLeadOwnership(user: AuthUser, leadOwnerId?: string | null) {
   if (!leadOwnerId || leadOwnerId !== user.id) {
     throw new AppError(403, "Staff can only admit their own leads");
   }
+}
+
+async function createWalkInStudentAndLead(input: WalkInStudentInput, user: AuthUser) {
+  const existingUser = await getUserByEmail(input.email);
+  if (existingUser) {
+    throw new AppError(409, "Student email already exists");
+  }
+
+  let createdStudent: { id: string };
+  try {
+    const created = await auth.api.signUpEmail({
+      body: {
+        email: input.email,
+        password: input.password,
+        name: `${input.firstName} ${input.lastName}`.trim(),
+        role: "student",
+        firstName: input.firstName,
+        lastName: input.lastName,
+        phone: input.phone,
+        isActive: true
+      }
+    });
+
+    createdStudent = created.user as { id: string };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unable to create student";
+    if (message.toLowerCase().includes("already")) {
+      throw new AppError(409, "Student email already exists");
+    }
+    throw new AppError(400, message);
+  }
+
+  await upsertUserProfile("student", createdStudent.id, {
+    startDate: new Date().toISOString().slice(0, 10)
+  });
+
+  const onboardedStage = await getOnboardedLeadStage();
+  if (!onboardedStage) {
+    throw new AppError(400, "No active onboarded lead stage configured");
+  }
+
+  const lead = await createLeadForAdmission({
+    firstName: input.firstName,
+    lastName: input.lastName,
+    phone: input.phone ?? "N/A",
+    email: input.email,
+    stageId: onboardedStage.id,
+    ownerId: user.id,
+    notes: "System-generated walk-in lead"
+  });
+
+  if (!lead) {
+    throw new AppError(500, "Failed to create walk-in lead");
+  }
+
+  return { studentId: createdStudent.id, leadId: lead.id };
+}
+
+async function createStudentForAdmission(input: WalkInStudentInput) {
+  const existingUser = await getUserByEmail(input.email);
+  if (existingUser) {
+    throw new AppError(409, "Student email already exists");
+  }
+
+  let createdStudent: { id: string };
+  try {
+    const created = await auth.api.signUpEmail({
+      body: {
+        email: input.email,
+        password: input.password,
+        name: `${input.firstName} ${input.lastName}`.trim(),
+        role: "student",
+        firstName: input.firstName,
+        lastName: input.lastName,
+        phone: input.phone,
+        isActive: true
+      }
+    });
+
+    createdStudent = created.user as { id: string };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unable to create student";
+    if (message.toLowerCase().includes("already")) {
+      throw new AppError(409, "Student email already exists");
+    }
+    throw new AppError(400, message);
+  }
+
+  await upsertUserProfile("student", createdStudent.id, {
+    startDate: new Date().toISOString().slice(0, 10)
+  });
+
+  return createdStudent.id;
+}
+
+function generateTemporaryPassword() {
+  return `Muzigal#${Math.random().toString(36).slice(2, 10)}${Date.now().toString(36).slice(-4)}`;
+}
+
+async function createOrAttachStudentFromLead(lead: {
+  firstName: string;
+  lastName: string;
+  email: string | null;
+  phone: string;
+}) {
+  if (!lead.email) {
+    throw new AppError(400, "Lead email is required to create student account");
+  }
+
+  const existingUser = await getUserByEmail(lead.email);
+  if (existingUser) {
+    if (existingUser.role !== "student") {
+      throw new AppError(409, "Lead email belongs to a non-student user");
+    }
+    return existingUser.id;
+  }
+
+  return createStudentForAdmission({
+    firstName: lead.firstName,
+    lastName: lead.lastName,
+    email: lead.email,
+    phone: lead.phone,
+    password: generateTemporaryPassword()
+  });
 }
 
 function buildWeeklySlotPayload(
@@ -151,6 +283,14 @@ export async function listAdmissionsService(
   return listAdmissions(effectiveFilters, page, pageSize);
 }
 
+export async function listAdmissionPrerequisitesService(
+  courseId: string | undefined,
+  search: string | undefined,
+  user: AuthUser
+) {
+  return listAdmissionPrerequisites(courseId, search, user.role === "staff" ? user.id : undefined);
+}
+
 export async function getAdmissionService(id: string, user: AuthUser) {
   const record = await getAdmissionWithLead(id);
   if (!record?.admission) {
@@ -164,16 +304,24 @@ export async function getAdmissionService(id: string, user: AuthUser) {
 export async function createAdmissionService(input: AdmissionCreateInput, user: AuthUser) {
   parseDateOnly(input.startDate, "startDate");
 
-  const leadRecord = await getLeadWithStage(input.leadId);
-  if (!leadRecord?.lead) {
-    throw new AppError(404, "Lead not found");
-  }
+  let leadId: string | undefined = input.leadId;
+  let studentId = input.studentId;
+  let leadRecord: Awaited<ReturnType<typeof getLeadWithStage>> | null = null;
 
-  if (!leadRecord.stage?.isOnboarded) {
-    throw new AppError(400, "Lead must be in an onboarded stage to create an admission");
-  }
+  if (leadId) {
+    leadRecord = await getLeadWithStage(leadId);
+    if (!leadRecord?.lead) {
+      throw new AppError(404, "Lead not found");
+    }
 
-  ensureStaffLeadOwnership(user, leadRecord.lead.ownerId);
+    if (leadRecord.stage?.isOnboarded) {
+      throw new AppError(400, "Lead is already onboarded");
+    }
+
+    ensureStaffLeadOwnership(user, leadRecord.lead.ownerId);
+  } else if (!input.walkInStudent) {
+    throw new AppError(400, "leadId is required");
+  }
 
   const coursePlan = await getCoursePlanById(input.coursePlanId);
   if (!coursePlan || !coursePlan.isActive) {
@@ -246,23 +394,47 @@ export async function createAdmissionService(input: AdmissionCreateInput, user: 
     throw new AppError(409, "One or more slots are at capacity", { capacityIssues });
   }
 
-  if (input.studentId) {
-    const student = await getUserById(input.studentId);
+  if (input.walkInStudent && leadId) {
+    studentId = await createStudentForAdmission(input.walkInStudent);
+  }
+
+  if (input.walkInStudent && !leadId) {
+    const walkIn = await createWalkInStudentAndLead(input.walkInStudent, user);
+    leadId = walkIn.leadId;
+    studentId = walkIn.studentId;
+    leadRecord = await getLeadWithStage(leadId);
+  }
+
+  if (!studentId && leadRecord?.lead) {
+    studentId = await createOrAttachStudentFromLead({
+      firstName: leadRecord.lead.firstName,
+      lastName: leadRecord.lead.lastName,
+      email: leadRecord.lead.email,
+      phone: leadRecord.lead.phone
+    });
+  }
+
+  if (!leadId) {
+    throw new AppError(400, "leadId is required");
+  }
+
+  if (studentId) {
+    const student = await getUserById(studentId);
     if (!student || student.role !== "student") {
       throw new AppError(400, "Student profile not found");
     }
   }
 
-  const slotSchedule = input.studentId
+  const slotSchedule = (studentId
     ? payload.map((slot) => ({
         dayOfWeek: slot.dayOfWeek,
         classroomSlotId: classroomSlotByTime.get(slot.timeSlotId)!.id
       }))
-    : [];
+    : []) as Array<{ dayOfWeek: number; classroomSlotId: string }>;
 
-  const attendanceRows = input.studentId
+  const attendanceRows = studentId
     ? generateAttendanceDates(input.startDate, finalClasses, slotSchedule).map((item) => ({
-        studentId: input.studentId!,
+        studentId,
         classroomSlotId: item.classroomSlotId,
         classDate: item.classDate,
         status: "scheduled" as const,
@@ -272,8 +444,8 @@ export async function createAdmissionService(input: AdmissionCreateInput, user: 
 
   const admission = await createAdmissionTransaction({
     admissionValues: {
-      leadId: input.leadId,
-      studentId: input.studentId ?? null,
+      leadId,
+      studentId: studentId ?? null,
       coursePlanId: input.coursePlanId,
       courseId: input.courseId,
       startDate: input.startDate,
@@ -288,9 +460,9 @@ export async function createAdmissionService(input: AdmissionCreateInput, user: 
       createdBy: user.id
     },
     timeSlotIds: payload.map((slot) => slot.timeSlotId),
-    enrollments: input.studentId
+    enrollments: studentId
       ? classroomSlotIds.map((slotId) => ({
-          studentId: input.studentId!,
+          studentId,
           classroomSlotId: slotId,
           startDate: input.startDate,
           status: "active"
@@ -301,6 +473,15 @@ export async function createAdmissionService(input: AdmissionCreateInput, user: 
 
   if (!admission) {
     throw new AppError(500, "Failed to create admission");
+  }
+
+  const onboardedStage = await getOnboardedLeadStage();
+  if (!onboardedStage) {
+    throw new AppError(400, "No active onboarded lead stage configured");
+  }
+
+  if (leadRecord?.lead && !leadRecord.stage?.isOnboarded) {
+    await setLeadStage(leadRecord.lead.id, onboardedStage.id);
   }
 
   return admission;

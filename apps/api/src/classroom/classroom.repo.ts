@@ -2,6 +2,7 @@ import { and, desc, eq, inArray, isNull, sql, type SQL } from "drizzle-orm";
 import { db } from "../db";
 import {
   attendance,
+  courseTeachers,
   classroomEnrollments,
   classroomSlots,
   courses,
@@ -303,6 +304,16 @@ export async function existsClassroomSlotForCourseTeacher(courseId: string, teac
     .from(classroomSlots)
     .where(and(eq(classroomSlots.courseId, courseId), eq(classroomSlots.teacherId, teacherId)))
     .limit(1);
+  return Boolean(result[0]);
+}
+
+export async function existsCourseTeacherAssignment(courseId: string, teacherId: string) {
+  const result = await db
+    .select({ id: courseTeachers.id })
+    .from(courseTeachers)
+    .where(and(eq(courseTeachers.courseId, courseId), eq(courseTeachers.teacherId, teacherId)))
+    .limit(1);
+
   return Boolean(result[0]);
 }
 

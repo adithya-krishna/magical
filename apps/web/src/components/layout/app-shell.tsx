@@ -59,6 +59,8 @@ export function AppShell() {
     <SidebarProvider>
       <AppSidebar
         user={{
+          id: user.id,
+          role: (user as { role?: string }).role,
           email: user.email,
           name: user.name,
           image: user.image,

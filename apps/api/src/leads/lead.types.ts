@@ -1,6 +1,7 @@
 export type LeadListFilters = {
   search?: string;
   stageId?: string;
+  excludeOnboarded?: boolean;
   ownerId?: string;
   source?: string;
   followUpStatus?: "open" | "done";

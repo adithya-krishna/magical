@@ -5,6 +5,10 @@ export const leadListSchema = z.object({
   pageSize: z.coerce.number().int().positive().optional(),
   search: z.string().optional(),
   stageId: z.string().uuid().optional(),
+  excludeOnboarded: z
+    .enum(["true", "false"])
+    .transform((value) => value === "true")
+    .optional(),
   ownerId: z.string().uuid().optional(),
   source: z.string().optional(),
   followUpStatus: z.enum(["open", "done"]).optional(),

@@ -7,8 +7,20 @@ import { HomePage } from "@/pages/home-page"
 import { CoursesPage } from "@/pages/courses-page"
 import { InstrumentsPage } from "@/pages/instruments-page"
 import { LeadsPage } from "@/pages/leads-page"
+import { AdmissionsPage } from "@/pages/admissions-page"
+import { ClassroomPage } from "@/pages/classroom-page"
 import { ProfilePage } from "@/pages/profile/profile-page"
 import { SettingsPage } from "@/pages/settings/settings-page"
+import {
+  AdminDetailPage,
+  AdminsPage,
+  StaffDetailPage,
+  StaffPage,
+  StudentDetailPage,
+  StudentsPage,
+  TeacherDetailPage,
+  TeachersPage,
+} from "@/pages/users-pages"
 
 const rootRoute = createRootRoute({
   component: Outlet,
@@ -52,6 +64,18 @@ const leadsRoute = createRoute({
   component: LeadsPage,
 })
 
+const admissionsRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/admissions",
+  component: AdmissionsPage,
+})
+
+const classroomRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/classroom",
+  component: ClassroomPage,
+})
+
 const coursesRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/courses",
@@ -76,13 +100,71 @@ const profileRoute = createRoute({
   component: ProfilePage,
 })
 
+const studentsRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/users/students",
+  component: StudentsPage,
+})
+
+const studentDetailRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/users/students/$id/$tab",
+  component: StudentDetailPage,
+})
+
+const teachersRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/users/teachers",
+  component: TeachersPage,
+})
+
+const teacherDetailRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/users/teachers/$id/$tab",
+  component: TeacherDetailPage,
+})
+
+const staffRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/users/staff",
+  component: StaffPage,
+})
+
+const staffDetailRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/users/staff/$id/$tab",
+  component: StaffDetailPage,
+})
+
+const adminsRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/users/admins",
+  component: AdminsPage,
+})
+
+const adminDetailRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/users/admins/$id/$tab",
+  component: AdminDetailPage,
+})
+
 const routeTree = rootRoute.addChildren([
   publicRoute.addChildren([loginRoute, requestAccessRoute]),
   appRoute.addChildren([
     indexRoute,
     leadsRoute,
+    admissionsRoute,
+    classroomRoute,
     coursesRoute,
     instrumentsRoute,
+    studentsRoute,
+    studentDetailRoute,
+    teachersRoute,
+    teacherDetailRoute,
+    staffRoute,
+    staffDetailRoute,
+    adminsRoute,
+    adminDetailRoute,
     settingsRoute,
     profileRoute,
   ]),

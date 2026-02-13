@@ -21,12 +21,13 @@ import {
 } from "@/components/ui/dropdown-menu"
 
 type LeadRowActionsProps = {
+  leadId: string
   leadName: string
   onUpdate: () => void
   onDelete: () => void
 }
 
-export function LeadRowActions({ leadName, onUpdate, onDelete }: LeadRowActionsProps) {
+export function LeadRowActions({ leadId, leadName, onUpdate, onDelete }: LeadRowActionsProps) {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
 
   return (
@@ -61,7 +62,13 @@ export function LeadRowActions({ leadName, onUpdate, onDelete }: LeadRowActionsP
           >
             Delete
           </DropdownMenuItem>
-          <DropdownMenuItem disabled>Trigger Admission (Coming soon)</DropdownMenuItem>
+          <DropdownMenuItem
+            onSelect={() => {
+              window.location.assign(`/admissions?leadId=${leadId}`)
+            }}
+          >
+            Create Admission
+          </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
 

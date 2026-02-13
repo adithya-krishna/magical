@@ -111,4 +111,5 @@ Users for assignment
 
 ## Notes
 - Admissions integration will come later; keep stage and lead ownership auditable for future workflow automation.
+- Admissions may create system-generated leads for walk-in enrollments. Use a distinct source value (e.g. `walk_in`) and keep them in an onboarded stage.
 - Scheduled job should emit lead_followup_due notifications for open leads with followUpDate due or overdue.

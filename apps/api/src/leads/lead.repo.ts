@@ -1,6 +1,6 @@
 import { and, desc, eq, ilike, isNull, or, sql, type SQL } from "drizzle-orm";
 import { db } from "../db";
-import { leadAuditEvents, leadNotes, leads } from "../db/schema";
+import { leadAuditEvents, leadNotes, leads, leadStages } from "../db/schema";
 import type { LeadCreateInput, LeadListFilters, LeadUpdateInput } from "./lead.types";
 
 const DEFAULT_PAGE = 1;
@@ -15,6 +15,9 @@ export async function listLeads(
 
   if (filters.stageId) {
     whereClauses.push(eq(leads.stageId, filters.stageId));
+  }
+  if (filters.excludeOnboarded) {
+    whereClauses.push(eq(leadStages.isOnboarded, false));
   }
   if (filters.ownerId) {
     whereClauses.push(eq(leads.ownerId, filters.ownerId));
@@ -52,14 +55,17 @@ export async function listLeads(
   const data = await db
     .select()
     .from(leads)
+    .leftJoin(leadStages, eq(leads.stageId, leadStages.id))
     .where(where)
     .orderBy(desc(leads.createdAt))
     .limit(pageSize)
-    .offset(offset);
+    .offset(offset)
+    .then((rows) => rows.map((row) => row.leads));
 
   const countResult = await db
     .select({ count: sql<number>`count(*)` })
     .from(leads)
+    .leftJoin(leadStages, eq(leads.stageId, leadStages.id))
     .where(where);
 
   return { data, total: Number(countResult[0]?.count ?? 0) };

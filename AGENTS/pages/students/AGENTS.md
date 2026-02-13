@@ -113,3 +113,9 @@ Student progress
 
 ## Notes
 - Teachers, Staff, and Admins will have parallel page agents later.
+
+## Parity Notes
+- Page-level RBAC takes precedence over broad menu visibility hints.
+- Effective hierarchy is `admins > staff > teachers > students`.
+- Students do not submit access requests; student login credentials are provisioned after admission completion.
+- Walk-in admissions can provision student credentials inline during admission creation.

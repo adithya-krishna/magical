@@ -4,6 +4,7 @@ import {
   createAdmission,
   deleteAdmission,
   getAdmission,
+  listAdmissionPrerequisites,
   listAdmissions,
   updateAdmission
 } from "./admission.controller";
@@ -13,6 +14,11 @@ export const admissionsRouter = Router();
 admissionsRouter.use(requireAuth);
 
 admissionsRouter.get("/", requireRole(["super_admin", "admin", "staff"]), listAdmissions);
+admissionsRouter.get(
+  "/prerequisites",
+  requireRole(["super_admin", "admin", "staff"]),
+  listAdmissionPrerequisites
+);
 admissionsRouter.post("/", requireRole(["super_admin", "admin", "staff"]), createAdmission);
 admissionsRouter.get(
   "/:id",
