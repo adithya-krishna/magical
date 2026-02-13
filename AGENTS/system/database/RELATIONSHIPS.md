@@ -22,7 +22,10 @@ Users and access
 Leads
 - `leads.stageId` → `lead_stages.id` (required)
 - `leads.ownerId` → `users.id` (nullable)
+- `leads.assignedTeacherId` → `users.id` (nullable, role=teacher)
+- `leads` also stores CRM workflow/profile fields: area, community, address, guardianName, age, expectedBudget, numberOfContactAttempts, lastContactedDate, nextFollowUp, walkInDate, demoDate, demoConducted.
 - `lead_notes.leadId` → `leads.id`
+- `lead_tags.leadId` → `leads.id`
 - `lead_audit_events.leadId` → `leads.id`
 
 Courses

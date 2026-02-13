@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type ColumnDef } from "@tanstack/react-table";
+import { useNavigate } from "@tanstack/react-router";
 import debounce from "lodash/debounce";
 import { Plus, Upload } from "lucide-react";
 import { toast } from "sonner";
@@ -19,7 +20,6 @@ import {
   DEFAULT_PAGE_SIZE_OPTIONS,
   usePaginationConfig,
 } from "@/lib/pagination-config";
-import { LeadDetailsSheet } from "@/pages/leads/lead-details-sheet";
 import {
   LeadFormSheet,
   mapLeadFormToPayload,
@@ -27,7 +27,6 @@ import {
 import { LeadRowActions } from "@/pages/leads/lead-row-actions";
 import type {
   Lead,
-  LeadDetailsResponse,
   LeadFormValues,
   LeadsResponse,
   LeadStagesResponse,
@@ -66,6 +65,7 @@ function getErrorMessage(error: unknown, fallback: string) {
 
 export function LeadsPage() {
   const apiUrl = import.meta.env.VITE_API_URL ?? "http://localhost:4000";
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const paginationConfigQuery = usePaginationConfig();
   const pageSizeOptions =
@@ -78,8 +78,6 @@ export function LeadsPage() {
   const [pageSize, setPageSize] = useState(defaultPageSize);
   const [formOpen, setFormOpen] = useState(false);
   const [editingLead, setEditingLead] = useState<Lead | null>(null);
-  const [detailsOpen, setDetailsOpen] = useState(false);
-  const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
 
   const debouncedSearchUpdate = useMemo(
     () =>
@@ -142,22 +140,6 @@ export function LeadsPage() {
     },
   });
 
-  const leadDetailsQuery = useQuery({
-    queryKey: ["lead", selectedLeadId],
-    enabled: detailsOpen && Boolean(selectedLeadId),
-    queryFn: async (): Promise<LeadDetailsResponse> => {
-      const response = await fetch(`${apiUrl}/api/v1/leads/${selectedLeadId}`, {
-        credentials: "include",
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to load lead details");
-      }
-
-      return response.json();
-    },
-  });
-
   const createLeadMutation = useMutation({
     mutationFn: async (values: LeadFormValues) => {
       const response = await fetch(`${apiUrl}/api/v1/leads`, {
@@ -206,11 +188,6 @@ export function LeadsPage() {
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["leads"] });
-      if (selectedLeadId) {
-        await queryClient.invalidateQueries({
-          queryKey: ["lead", selectedLeadId],
-        });
-      }
       setFormOpen(false);
       setEditingLead(null);
     },
@@ -232,10 +209,6 @@ export function LeadsPage() {
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["leads"] });
-      if (selectedLeadId) {
-        setDetailsOpen(false);
-        setSelectedLeadId(null);
-      }
     },
     onError: (error) => {
       toast.error(getErrorMessage(error, "Unable to delete lead."));
@@ -255,14 +228,6 @@ export function LeadsPage() {
       );
     }
   }, [stagesQuery.isError, stagesQuery.error]);
-
-  useEffect(() => {
-    if (leadDetailsQuery.isError) {
-      toast.error(
-        getErrorMessage(leadDetailsQuery.error, "Unable to load lead details."),
-      );
-    }
-  }, [leadDetailsQuery.isError, leadDetailsQuery.error]);
 
   const stageById = useMemo(() => {
     const map = new Map<string, LeadStagesResponse["data"][number]>();
@@ -468,8 +433,10 @@ export function LeadsPage() {
               }}
               pageSizeOptions={pageSizeOptions}
               onRowClick={(lead) => {
-                setSelectedLeadId(lead.id);
-                setDetailsOpen(true);
+                navigate({
+                  to: "/leads/$id/$tab",
+                  params: { id: lead.id, tab: "follow-up" },
+                });
               }}
             />
 
@@ -500,18 +467,6 @@ export function LeadsPage() {
 
           await createLeadMutation.mutateAsync(values);
         }}
-      />
-
-      <LeadDetailsSheet
-        open={detailsOpen}
-        onOpenChange={(open) => {
-          setDetailsOpen(open);
-          if (!open) {
-            setSelectedLeadId(null);
-          }
-        }}
-        lead={leadDetailsQuery.data?.data}
-        isLoading={leadDetailsQuery.isLoading}
       />
     </>
   );

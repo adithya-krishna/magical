@@ -59,6 +59,7 @@ Leads
 - lead_followup_status_changed
 - lead_assigned
 - lead_stage_changed
+- lead_walkin_assigned
 
 Admissions
 - admission_created
@@ -91,6 +92,7 @@ System
 ## Trigger rules
 Event-driven
 - On lead assignment, stage change, follow-up date updates.
+- On lead teacher assignment for walk-in.
 - On admission creation or capacity block.
 - On reschedule request creation and approval/rejection.
 - On role or access changes.
@@ -104,6 +106,7 @@ Scheduled jobs
 
 ## Routing rules
 - Lead follow-up alerts go to lead owner and admins.
+- Lead walk-in teacher assignment goes to the assigned teacher.
 - Reschedule requests go to admin and assigned teacher.
 - Reschedule results go to student and assigned teacher.
 - Classes remaining alerts go to student and admins.

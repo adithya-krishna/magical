@@ -1,15 +1,29 @@
 import { Request, Response } from "express";
 import { isAppError } from "../common/errors";
 import { z } from "zod";
-import { leadCreateSchema, leadListSchema, leadUpdateSchema } from "./lead.schemas";
+import {
+  leadCreateSchema,
+  leadListSchema,
+  leadNoteCreateSchema,
+  leadProfileSchema,
+  leadTagsSchema,
+  leadUpdateSchema,
+  leadWorkflowSchema
+} from "./lead.schemas";
 import {
   addLeadNoteService,
   bulkImportLeadsService,
   createLeadService,
+  getLeadDetailsService,
   getLeadService,
+  listLeadHistoryService,
+  listLeadNotesService,
   listLeadsService,
+  replaceLeadTagsService,
   softDeleteLeadService,
-  updateLeadService
+  updateLeadProfileService,
+  updateLeadService,
+  updateLeadWorkflowService
 } from "./lead.service";
 
 function handleError(res: Response, error: unknown) {
@@ -28,9 +42,14 @@ export async function listLeads(req: Request, res: Response) {
     return;
   }
 
+  if (!req.user) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+
   try {
     const { page, pageSize, ...filters } = parsed.data;
-    const result = await listLeadsService(filters, page, pageSize);
+    const result = await listLeadsService(filters, req.user, page, pageSize);
     res.json(result);
   } catch (error) {
     handleError(res, error);
@@ -44,9 +63,34 @@ export async function getLead(req: Request, res: Response) {
     return;
   }
 
+  if (!req.user) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+
   try {
-    const lead = await getLeadService(parsed.data.id);
+    const lead = await getLeadService(parsed.data.id, req.user);
     res.json({ data: lead });
+  } catch (error) {
+    handleError(res, error);
+  }
+}
+
+export async function getLeadDetails(req: Request, res: Response) {
+  const parsed = z.object({ id: z.string().uuid() }).safeParse(req.params);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.flatten() });
+    return;
+  }
+
+  if (!req.user) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+
+  try {
+    const data = await getLeadDetailsService(parsed.data.id, req.user);
+    res.json({ data });
   } catch (error) {
     handleError(res, error);
   }
@@ -149,15 +193,133 @@ export async function addLeadNote(req: Request, res: Response) {
     return;
   }
 
-  const body = req.body as { body?: string };
-  if (!body?.body) {
+  const body = leadNoteCreateSchema.safeParse(req.body);
+  if (!body.success) {
     res.status(400).json({ error: "Note body is required" });
     return;
   }
 
   try {
-    const note = await addLeadNoteService(params.data.id, body.body, req.user);
+    const note = await addLeadNoteService(params.data.id, body.data.body, req.user);
     res.status(201).json({ data: note });
+  } catch (error) {
+    handleError(res, error);
+  }
+}
+
+export async function listLeadNotes(req: Request, res: Response) {
+  const parsed = z.object({ id: z.string().uuid() }).safeParse(req.params);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.flatten() });
+    return;
+  }
+
+  if (!req.user) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+
+  try {
+    const data = await listLeadNotesService(parsed.data.id, req.user);
+    res.json({ data });
+  } catch (error) {
+    handleError(res, error);
+  }
+}
+
+export async function listLeadHistory(req: Request, res: Response) {
+  const parsed = z.object({ id: z.string().uuid() }).safeParse(req.params);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.flatten() });
+    return;
+  }
+
+  if (!req.user) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+
+  try {
+    const data = await listLeadHistoryService(parsed.data.id, req.user);
+    res.json({ data });
+  } catch (error) {
+    handleError(res, error);
+  }
+}
+
+export async function updateLeadWorkflow(req: Request, res: Response) {
+  const params = z.object({ id: z.string().uuid() }).safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: params.error.flatten() });
+    return;
+  }
+
+  const parsed = leadWorkflowSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.flatten() });
+    return;
+  }
+
+  if (!req.user) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+
+  try {
+    const lead = await updateLeadWorkflowService(params.data.id, parsed.data, req.user);
+    res.json({ data: lead });
+  } catch (error) {
+    handleError(res, error);
+  }
+}
+
+export async function updateLeadProfile(req: Request, res: Response) {
+  const params = z.object({ id: z.string().uuid() }).safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: params.error.flatten() });
+    return;
+  }
+
+  const parsed = leadProfileSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.flatten() });
+    return;
+  }
+
+  if (!req.user) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+
+  try {
+    const lead = await updateLeadProfileService(params.data.id, parsed.data, req.user);
+    res.json({ data: lead });
+  } catch (error) {
+    handleError(res, error);
+  }
+}
+
+export async function upsertLeadTags(req: Request, res: Response) {
+  const params = z.object({ id: z.string().uuid() }).safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: params.error.flatten() });
+    return;
+  }
+
+  const parsed = leadTagsSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.flatten() });
+    return;
+  }
+
+  if (!req.user) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+
+  try {
+    const tags = await replaceLeadTagsService(params.data.id, parsed.data.tags, req.user);
+    res.json({ data: tags });
   } catch (error) {
     handleError(res, error);
   }

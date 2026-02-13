@@ -7,6 +7,7 @@ import { HomePage } from "@/pages/home-page"
 import { CoursesPage } from "@/pages/courses-page"
 import { InstrumentsPage } from "@/pages/instruments-page"
 import { LeadsPage } from "@/pages/leads-page"
+import { LeadsDetailPage } from "@/pages/leads-detail-page"
 import { AdmissionsPage } from "@/pages/admissions-page"
 import { ClassroomPage } from "@/pages/classroom-page"
 import { ProfilePage } from "@/pages/profile/profile-page"
@@ -63,6 +64,12 @@ const leadsRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/leads",
   component: LeadsPage,
+})
+
+const leadDetailRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/leads/$id/$tab",
+  component: LeadsDetailPage,
 })
 
 const admissionsRoute = createRoute({
@@ -160,6 +167,7 @@ const routeTree = rootRoute.addChildren([
   appRoute.addChildren([
     indexRoute,
     leadsRoute,
+    leadDetailRoute,
     admissionsRoute,
     classroomRoute,
     coursesRoute,

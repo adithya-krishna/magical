@@ -17,6 +17,26 @@ export async function listUsersByRoles(roles: UserRole[]) {
     .where(and(isNull(users.deletedAt), inArray(users.role, roles)));
 }
 
+export async function listActiveUsersByRoles(roles: UserRole[]) {
+  return db
+    .select({
+      id: users.id,
+      firstName: users.firstName,
+      lastName: users.lastName,
+      email: users.email,
+      role: users.role
+    })
+    .from(users)
+    .where(
+      and(
+        isNull(users.deletedAt),
+        eq(users.isActive, true),
+        eq(users.banned, false),
+        inArray(users.role, roles)
+      )
+    );
+}
+
 export async function getUserById(id: string) {
   const result = await db
     .select()

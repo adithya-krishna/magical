@@ -83,3 +83,13 @@ export async function getNewLeadStage() {
     .limit(1);
   return result[0] ?? null;
 }
+
+export async function getActiveLeadStageByName(name: string) {
+  const result = await db
+    .select()
+    .from(leadStages)
+    .where(and(eq(leadStages.name, name), eq(leadStages.isActive, true)))
+    .limit(1);
+
+  return result[0] ?? null;
+}

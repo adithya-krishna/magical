@@ -212,6 +212,81 @@ export function LeadFormSheet({
 
           <div className="grid gap-4 md:grid-cols-2">
             <form.Field
+              name="area"
+              children={(field) => (
+                <div className="space-y-2">
+                  <Label htmlFor="lead-area">Area</Label>
+                  <Input
+                    id="lead-area"
+                    value={field.state.value}
+                    onBlur={field.handleBlur}
+                    onChange={(event) => field.handleChange(event.target.value)}
+                    disabled={isSaving}
+                  />
+                </div>
+              )}
+            />
+
+            <form.Field
+              name="community"
+              children={(field) => (
+                <div className="space-y-2">
+                  <Label htmlFor="lead-community">Community</Label>
+                  <Input
+                    id="lead-community"
+                    value={field.state.value}
+                    onBlur={field.handleBlur}
+                    onChange={(event) => field.handleChange(event.target.value)}
+                    disabled={isSaving}
+                  />
+                </div>
+              )}
+            />
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <form.Field
+              name="age"
+              children={(field) => (
+                <div className="space-y-2">
+                  <Label htmlFor="lead-age">Age</Label>
+                  <Input
+                    id="lead-age"
+                    type="number"
+                    min={0}
+                    max={120}
+                    value={field.state.value ?? ""}
+                    onBlur={field.handleBlur}
+                    onChange={(event) =>
+                      field.handleChange(event.target.value ? Number(event.target.value) : null)
+                    }
+                    disabled={isSaving}
+                  />
+                </div>
+              )}
+            />
+
+            <form.Field
+              name="expectedBudget"
+              children={(field) => (
+                <div className="space-y-2">
+                  <Label htmlFor="lead-expected-budget">Expected budget</Label>
+                  <Input
+                    id="lead-expected-budget"
+                    type="number"
+                    min={0}
+                    value={field.state.value}
+                    onBlur={field.handleBlur}
+                    onChange={(event) => field.handleChange(Number(event.target.value || 0))}
+                    disabled={isSaving}
+                  />
+                </div>
+              )}
+            />
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <form.Field
               name="stageId"
               validators={{
                 onChange: ({ value }) => {
