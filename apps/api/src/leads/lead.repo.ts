@@ -1,10 +1,11 @@
 import { and, desc, eq, ilike, isNull, or, sql, type SQL } from "drizzle-orm";
+import { PAGINATION_DEFAULT_PAGE_SIZE } from "../common/pagination";
 import { db } from "../db";
 import { leadAuditEvents, leadNotes, leads, leadStages } from "../db/schema";
 import type { LeadCreateInput, LeadListFilters, LeadUpdateInput } from "./lead.types";
 
 const DEFAULT_PAGE = 1;
-const DEFAULT_PAGE_SIZE = 25;
+const DEFAULT_PAGE_SIZE = PAGINATION_DEFAULT_PAGE_SIZE;
 
 export async function listLeads(
   filters: LeadListFilters,

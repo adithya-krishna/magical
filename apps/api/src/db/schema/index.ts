@@ -258,6 +258,7 @@ export const studentProgress = pgTable("student_progress", {
 export const leadStages = pgTable("lead_stages", {
   id: uuid("id").defaultRandom().primaryKey(),
   name: text("name").notNull().unique(),
+  color: text("color").notNull().default("bg-slate-500"),
   ordering: integer("ordering").notNull(),
   isOnboarded: boolean("is_onboarded").notNull().default(false),
   isActive: boolean("is_active").notNull().default(true)

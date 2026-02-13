@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import { type ColumnDef } from "@tanstack/react-table"
 import { toast } from "sonner"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { DataTable } from "@/components/data-tables/data-table"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import {
@@ -21,14 +23,6 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet"
 import { Switch } from "@/components/ui/switch"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { authClient } from "@/lib/auth-client"
 
@@ -510,6 +504,177 @@ export function ClassroomPage() {
     ].filter((tab) => tab.visible)
   }, [canManage, canView])
 
+  const rescheduleColumns = useMemo<ColumnDef<RescheduleRow>[]>(() => {
+    return [
+      {
+        id: "requested_date",
+        accessorKey: "requestedDate",
+        header: "Requested date",
+      },
+      {
+        id: "student_id",
+        accessorKey: "studentId",
+        header: "Student",
+        cell: ({ row }) => <span className="font-mono text-xs">{row.original.studentId}</span>,
+      },
+      {
+        id: "status",
+        accessorKey: "status",
+        filterFn: (row, columnId, filterValues) => {
+          const selected = Array.isArray(filterValues) ? (filterValues as string[]) : []
+          if (!selected.length) return true
+          return selected.includes(String(row.getValue(columnId)))
+        },
+        header: "Status",
+        cell: ({ row }) => <Badge variant="outline">{row.original.status}</Badge>,
+      },
+      {
+        id: "created_at",
+        accessorKey: "createdAt",
+        header: "Created",
+        cell: ({ row }) => new Date(row.original.createdAt).toLocaleDateString(),
+      },
+      {
+        id: "actions",
+        header: "Actions",
+        cell: ({ row }) =>
+          canManage ? (
+            <div className="flex justify-end gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={(event) => {
+                  event.stopPropagation()
+                  updateRescheduleMutation.mutate({ id: row.original.id, status: "rejected" })
+                }}
+              >
+                Reject
+              </Button>
+              <Button
+                size="sm"
+                onClick={(event) => {
+                  event.stopPropagation()
+                  updateRescheduleMutation.mutate({ id: row.original.id, status: "approved" })
+                }}
+              >
+                Approve
+              </Button>
+            </div>
+          ) : (
+            <span className="text-xs text-muted-foreground">View only</span>
+          ),
+      },
+    ]
+  }, [canManage, updateRescheduleMutation])
+
+  const timeSlotColumns = useMemo<ColumnDef<TimeSlot>[]>(() => {
+    return [
+      {
+        id: "day",
+        accessorFn: (row) => dayLabels[row.dayOfWeek],
+        header: "Day",
+      },
+      {
+        id: "start",
+        accessorFn: (row) => row.startTime.slice(0, 5),
+        header: "Start",
+      },
+      {
+        id: "end",
+        accessorFn: (row) => row.endTime.slice(0, 5),
+        header: "End",
+      },
+      {
+        id: "duration",
+        accessorFn: (row) => `${row.durationMinutes}m`,
+        header: "Duration",
+      },
+      {
+        id: "status",
+        accessorFn: (row) => (row.isActive ? "active" : "archived"),
+        filterFn: (row, columnId, filterValues) => {
+          const selected = Array.isArray(filterValues) ? (filterValues as string[]) : []
+          if (!selected.length) return true
+          return selected.includes(String(row.getValue(columnId)))
+        },
+        header: "Status",
+      },
+      {
+        id: "actions",
+        header: "Actions",
+        cell: ({ row }) =>
+          row.original.isActive ? (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={(event) => {
+                event.stopPropagation()
+                deleteTimeSlotMutation.mutate(row.original.id)
+              }}
+            >
+              Archive
+            </Button>
+          ) : (
+            <span className="text-xs text-muted-foreground">-</span>
+          ),
+      },
+    ]
+  }, [deleteTimeSlotMutation])
+
+  const classroomSlotColumns = useMemo<ColumnDef<ClassroomSlot>[]>(() => {
+    return [
+      {
+        id: "day",
+        accessorFn: (row) => dayLabels[row.timeSlot?.dayOfWeek ?? 0],
+        header: "Day",
+      },
+      {
+        id: "start",
+        accessorFn: (row) => row.timeSlot?.startTime?.slice(0, 5) ?? "-",
+        header: "Start",
+      },
+      {
+        id: "course_name",
+        accessorFn: (row) => row.course?.name ?? "-",
+        header: "Course",
+      },
+      {
+        id: "teacher_name",
+        accessorFn: (row) => formatPersonName(row.teacher ?? undefined),
+        header: "Teacher",
+      },
+      {
+        id: "capacity",
+        accessorKey: "capacity",
+        header: "Capacity",
+      },
+      {
+        id: "occupancy",
+        accessorKey: "occupancy",
+        header: "Occupancy",
+      },
+      {
+        id: "actions",
+        header: "Actions",
+        cell: ({ row }) =>
+          row.original.isActive ? (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={(event) => {
+                event.stopPropagation()
+                deleteClassroomSlotMutation.mutate(row.original.id)
+              }}
+            >
+              Archive
+            </Button>
+          ) : (
+            <span className="text-xs text-muted-foreground">-</span>
+          ),
+      },
+    ]
+  }, [deleteClassroomSlotMutation])
+
   if (!canView) {
     return (
       <Card>
@@ -616,59 +781,22 @@ export function ClassroomPage() {
               <CardDescription>Pending student requests. Staff can view; admins can approve/reject.</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="rounded-md border">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Requested date</TableHead>
-                      <TableHead>Student</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Created</TableHead>
-                      <TableHead className="text-right">Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {(rescheduleQuery.data?.data ?? []).map((request) => (
-                      <TableRow key={request.id}>
-                        <TableCell>{request.requestedDate}</TableCell>
-                        <TableCell className="font-mono text-xs">{request.studentId}</TableCell>
-                        <TableCell>
-                          <Badge variant="outline">{request.status}</Badge>
-                        </TableCell>
-                        <TableCell>{new Date(request.createdAt).toLocaleDateString()}</TableCell>
-                        <TableCell className="text-right">
-                          {canManage ? (
-                            <div className="flex justify-end gap-2">
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => updateRescheduleMutation.mutate({ id: request.id, status: "rejected" })}
-                              >
-                                Reject
-                              </Button>
-                              <Button
-                                size="sm"
-                                onClick={() => updateRescheduleMutation.mutate({ id: request.id, status: "approved" })}
-                              >
-                                Approve
-                              </Button>
-                            </div>
-                          ) : (
-                            <span className="text-xs text-muted-foreground">View only</span>
-                          )}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                    {!rescheduleQuery.isLoading && !(rescheduleQuery.data?.data ?? []).length ? (
-                      <TableRow>
-                        <TableCell colSpan={5} className="h-20 text-center text-muted-foreground">
-                          No pending requests.
-                        </TableCell>
-                      </TableRow>
-                    ) : null}
-                  </TableBody>
-                </Table>
-              </div>
+              <DataTable
+                columns={rescheduleColumns}
+                data={rescheduleQuery.data?.data ?? []}
+                searchableColumnIds={["student_id"]}
+                searchPlaceholder="Search by student id"
+                filters={[
+                  {
+                    title: "Status",
+                    columnId: "status",
+                    options: [{ label: "Pending", value: "pending" }],
+                  },
+                ]}
+                isLoading={rescheduleQuery.isLoading}
+                loadingMessage="Loading pending requests..."
+                emptyMessage="No pending requests."
+              />
             </CardContent>
           </Card>
         </TabsContent>
@@ -744,44 +872,25 @@ export function ClassroomPage() {
                 </Button>
               </div>
 
-              <div className="rounded-md border">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Day</TableHead>
-                      <TableHead>Start</TableHead>
-                      <TableHead>End</TableHead>
-                      <TableHead>Duration</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead className="text-right">Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {(timeSlotsQuery.data?.data ?? []).map((slot) => (
-                      <TableRow key={slot.id}>
-                        <TableCell>{dayLabels[slot.dayOfWeek]}</TableCell>
-                        <TableCell>{slot.startTime.slice(0, 5)}</TableCell>
-                        <TableCell>{slot.endTime.slice(0, 5)}</TableCell>
-                        <TableCell>{slot.durationMinutes}m</TableCell>
-                        <TableCell>{slot.isActive ? "Active" : "Archived"}</TableCell>
-                        <TableCell className="text-right">
-                          {slot.isActive ? (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => deleteTimeSlotMutation.mutate(slot.id)}
-                            >
-                              Archive
-                            </Button>
-                          ) : (
-                            <span className="text-xs text-muted-foreground">-</span>
-                          )}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
+              <DataTable
+                columns={timeSlotColumns}
+                data={timeSlotsQuery.data?.data ?? []}
+                searchableColumnIds={["day", "start", "end"]}
+                searchPlaceholder="Search day or time"
+                filters={[
+                  {
+                    title: "Status",
+                    columnId: "status",
+                    options: [
+                      { label: "Active", value: "active" },
+                      { label: "Archived", value: "archived" },
+                    ],
+                  },
+                ]}
+                isLoading={timeSlotsQuery.isLoading}
+                loadingMessage="Loading time slots..."
+                emptyMessage="No time slots found."
+              />
             </CardContent>
           </Card>
 
@@ -849,46 +958,15 @@ export function ClassroomPage() {
                 </Button>
               </div>
 
-              <div className="rounded-md border">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Day</TableHead>
-                      <TableHead>Start</TableHead>
-                      <TableHead>Course</TableHead>
-                      <TableHead>Teacher</TableHead>
-                      <TableHead>Capacity</TableHead>
-                      <TableHead>Occupancy</TableHead>
-                      <TableHead className="text-right">Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {(classroomSlotsQuery.data?.data ?? []).map((slot) => (
-                      <TableRow key={slot.id}>
-                        <TableCell>{dayLabels[slot.timeSlot?.dayOfWeek ?? 0]}</TableCell>
-                        <TableCell>{slot.timeSlot?.startTime?.slice(0, 5) ?? "-"}</TableCell>
-                        <TableCell>{slot.course?.name ?? "-"}</TableCell>
-                        <TableCell>{formatPersonName(slot.teacher ?? undefined)}</TableCell>
-                        <TableCell>{slot.capacity}</TableCell>
-                        <TableCell>{slot.occupancy}</TableCell>
-                        <TableCell className="text-right">
-                          {slot.isActive ? (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => deleteClassroomSlotMutation.mutate(slot.id)}
-                            >
-                              Archive
-                            </Button>
-                          ) : (
-                            <span className="text-xs text-muted-foreground">-</span>
-                          )}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
+              <DataTable
+                columns={classroomSlotColumns}
+                data={classroomSlotsQuery.data?.data ?? []}
+                searchableColumnIds={["course_name", "teacher_name"]}
+                searchPlaceholder="Search by course or teacher"
+                isLoading={classroomSlotsQuery.isLoading}
+                loadingMessage="Loading classroom allocations..."
+                emptyMessage="No classroom allocations found."
+              />
             </CardContent>
           </Card>
         </TabsContent>

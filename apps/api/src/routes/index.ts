@@ -11,6 +11,7 @@ import { usersRouter } from "./users";
 import { usersManagementRouter } from "../users/users-management.routes";
 import { coursePlansRouter } from "../admissions/course-plan.routes";
 import { prerequisitesRouter } from "../prerequisites/prerequisites.routes";
+import { paginationRouter } from "../common/pagination";
 
 export const apiRouter = Router();
 
@@ -26,3 +27,4 @@ apiRouter.use("/instruments", instrumentsRouter);
 apiRouter.use("/notifications", notificationsRouter);
 apiRouter.use("/users", usersRouter);
 apiRouter.use("/users", usersManagementRouter);
+apiRouter.use("/", paginationRouter);

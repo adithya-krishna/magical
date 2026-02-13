@@ -1,8 +1,10 @@
 import { z } from "zod";
+import { PAGINATION_MAX_PAGE_SIZE } from "../common/pagination";
+import { LEAD_STAGE_COLORS } from "./lead-stage-colors";
 
 export const leadListSchema = z.object({
   page: z.coerce.number().int().positive().optional(),
-  pageSize: z.coerce.number().int().positive().optional(),
+  pageSize: z.coerce.number().int().positive().max(PAGINATION_MAX_PAGE_SIZE).optional(),
   search: z.string().optional(),
   stageId: z.string().uuid().optional(),
   excludeOnboarded: z
@@ -34,7 +36,7 @@ export const leadUpdateSchema = leadCreateSchema.partial();
 
 export const leadStageSchema = z.object({
   name: z.string().min(1),
-  ordering: z.number().int().min(0),
+  color: z.enum(LEAD_STAGE_COLORS),
   isOnboarded: z.boolean().optional(),
   isActive: z.boolean().optional()
 });

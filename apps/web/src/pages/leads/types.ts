@@ -20,6 +20,7 @@ export type Lead = {
 export type LeadStage = {
   id: string
   name: string
+  color: string
   ordering: number
   isOnboarded: boolean
   isActive: boolean

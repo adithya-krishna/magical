@@ -9,6 +9,7 @@ import {
   sql,
   type SQL
 } from "drizzle-orm";
+import { PAGINATION_DEFAULT_PAGE_SIZE } from "../common/pagination";
 import { db } from "../db";
 import {
   accounts,
@@ -27,7 +28,7 @@ import type {
 } from "./users-management.types";
 
 const DEFAULT_PAGE = 1;
-const DEFAULT_PAGE_SIZE = 25;
+const DEFAULT_PAGE_SIZE = PAGINATION_DEFAULT_PAGE_SIZE;
 
 export async function listUsersByRole(
   role: ManagedRole,

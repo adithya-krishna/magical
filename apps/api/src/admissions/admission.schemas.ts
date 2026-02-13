@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { PAGINATION_MAX_PAGE_SIZE } from "../common/pagination";
 
 export const weeklySlotSchema = z.object({
   timeSlotId: z.string().uuid(),
@@ -7,7 +8,7 @@ export const weeklySlotSchema = z.object({
 
 export const admissionListSchema = z.object({
   page: z.coerce.number().int().positive().optional(),
-  pageSize: z.coerce.number().int().positive().optional(),
+  pageSize: z.coerce.number().int().positive().max(PAGINATION_MAX_PAGE_SIZE).optional(),
   search: z.string().optional(),
   status: z.enum(["pending", "active", "completed", "cancelled"]).optional(),
   coursePlanId: z.string().uuid().optional(),

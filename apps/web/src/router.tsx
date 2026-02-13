@@ -11,6 +11,7 @@ import { AdmissionsPage } from "@/pages/admissions-page"
 import { ClassroomPage } from "@/pages/classroom-page"
 import { ProfilePage } from "@/pages/profile/profile-page"
 import { SettingsPage } from "@/pages/settings/settings-page"
+import { ConfigPage } from "@/pages/settings/config-page"
 import {
   AdminDetailPage,
   AdminsPage,
@@ -94,6 +95,12 @@ const settingsRoute = createRoute({
   component: SettingsPage,
 })
 
+const configRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/settings/config",
+  component: ConfigPage,
+})
+
 const profileRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/profile",
@@ -166,6 +173,7 @@ const routeTree = rootRoute.addChildren([
     adminsRoute,
     adminDetailRoute,
     settingsRoute,
+    configRoute,
     profileRoute,
   ]),
 ])

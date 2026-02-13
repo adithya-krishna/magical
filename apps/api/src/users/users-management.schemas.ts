@@ -1,8 +1,9 @@
 import { z } from "zod";
+import { PAGINATION_MAX_PAGE_SIZE } from "../common/pagination";
 
 export const userListSchema = z.object({
   page: z.coerce.number().int().positive().optional(),
-  pageSize: z.coerce.number().int().positive().optional(),
+  pageSize: z.coerce.number().int().positive().max(PAGINATION_MAX_PAGE_SIZE).optional(),
   search: z.string().optional(),
   isActive: z
     .enum(["true", "false"])

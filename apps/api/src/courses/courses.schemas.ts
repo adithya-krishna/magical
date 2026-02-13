@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { PAGINATION_MAX_PAGE_SIZE } from "../common/pagination";
 
 export const instrumentListSchema = z.object({
   search: z.string().optional(),
@@ -17,7 +18,7 @@ export const instrumentUpdateSchema = instrumentCreateSchema.partial();
 
 export const courseListSchema = z.object({
   page: z.coerce.number().int().positive().optional(),
-  pageSize: z.coerce.number().int().positive().optional(),
+  pageSize: z.coerce.number().int().positive().max(PAGINATION_MAX_PAGE_SIZE).optional(),
   search: z.string().optional(),
   instrumentId: z.string().uuid().optional(),
   difficulty: z.enum(["beginner", "intermediate", "advanced"]).optional(),

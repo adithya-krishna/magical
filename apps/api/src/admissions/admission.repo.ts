@@ -1,4 +1,5 @@
 import { and, asc, desc, eq, ilike, inArray, isNull, or, sql, type SQL } from "drizzle-orm";
+import { PAGINATION_DEFAULT_PAGE_SIZE } from "../common/pagination";
 import { db } from "../db";
 import {
   admissionSlots,
@@ -18,7 +19,7 @@ import {
 import type { AdmissionListFilters } from "./admission.types";
 
 const DEFAULT_PAGE = 1;
-const DEFAULT_PAGE_SIZE = 25;
+const DEFAULT_PAGE_SIZE = PAGINATION_DEFAULT_PAGE_SIZE;
 
 export async function listAdmissions(
   filters: AdmissionListFilters,

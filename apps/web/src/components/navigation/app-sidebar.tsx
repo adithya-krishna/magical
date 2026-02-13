@@ -1,5 +1,5 @@
 import { Link, useLocation } from "@tanstack/react-router"
-import { BookOpen, CircleCheckBig, Guitar, LayoutDashboard, Presentation, Settings2, Users } from "lucide-react"
+import { BookOpen, CircleCheckBig, Guitar, LayoutDashboard, Presentation, Settings2, SlidersHorizontal, Users } from "lucide-react"
 import { NavMain } from "@/components/navigation/nav-main"
 import { NavUser } from "@/components/navigation/nav-user"
 import { canViewUserList, type AppRole } from "@/lib/users-rbac"
@@ -220,11 +220,23 @@ export function AppSidebar({ user }: { user: SidebarUser }) {
             <SidebarMenuButton
               asChild
               tooltip="Settings"
-              isActive={pathname.startsWith("/settings")}
+              isActive={pathname === "/settings"}
             >
               <Link to="/settings">
                 <Settings2 />
                 <span>Settings</span>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              asChild
+              tooltip="Config"
+              isActive={pathname.startsWith("/settings/config")}
+            >
+              <Link to="/settings/config">
+                <SlidersHorizontal />
+                <span>Config</span>
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>

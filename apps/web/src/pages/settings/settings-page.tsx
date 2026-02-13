@@ -1,33 +1,42 @@
-import { useEffect, useState } from "react"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { useEffect, useState } from "react";
+import { Link } from "@tanstack/react-router";
+import { ArrowRight } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import {
   Field,
   FieldContent,
   FieldDescription,
   FieldLabel,
   FieldTitle,
-} from "@/components/ui/field"
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
+} from "@/components/ui/field";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
   applyTheme,
   getThemePreference,
   setThemePreference,
   type ThemePreference,
-} from "@/lib/theme"
+} from "@/lib/theme";
 
 export function SettingsPage() {
   const [themePreference, setThemePreferenceState] = useState<ThemePreference>(
-    () => getThemePreference()
-  )
+    () => getThemePreference(),
+  );
 
   useEffect(() => {
-    applyTheme(themePreference)
-  }, [themePreference])
+    applyTheme(themePreference);
+  }, [themePreference]);
 
   const handleThemeChange = (value: ThemePreference) => {
-    setThemePreferenceState(value)
-    setThemePreference(value)
-  }
+    setThemePreferenceState(value);
+    setThemePreference(value);
+  };
 
   return (
     <div className="mx-auto w-full max-w-2xl space-y-6">
@@ -41,19 +50,25 @@ export function SettingsPage() {
       <Card>
         <CardHeader>
           <CardTitle>Theme</CardTitle>
-          <CardDescription>Choose how Muzigal should look on this device.</CardDescription>
+          <CardDescription>
+            Choose how Muzigal should look on this device.
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <RadioGroup
             value={themePreference}
-            onValueChange={(value) => handleThemeChange(value as ThemePreference)}
+            onValueChange={(value) =>
+              handleThemeChange(value as ThemePreference)
+            }
             className="max-w-sm"
           >
             <FieldLabel htmlFor="theme-system">
               <Field orientation="horizontal">
                 <FieldContent>
                   <FieldTitle>System</FieldTitle>
-                  <FieldDescription>Match your device appearance settings.</FieldDescription>
+                  <FieldDescription>
+                    Match your device appearance settings.
+                  </FieldDescription>
                 </FieldContent>
                 <RadioGroupItem value="system" id="theme-system" />
               </Field>
@@ -62,7 +77,9 @@ export function SettingsPage() {
               <Field orientation="horizontal">
                 <FieldContent>
                   <FieldTitle>Light</FieldTitle>
-                  <FieldDescription>Always use a light background.</FieldDescription>
+                  <FieldDescription>
+                    Always use a light background.
+                  </FieldDescription>
                 </FieldContent>
                 <RadioGroupItem value="light" id="theme-light" />
               </Field>
@@ -71,7 +88,9 @@ export function SettingsPage() {
               <Field orientation="horizontal">
                 <FieldContent>
                   <FieldTitle>Dark</FieldTitle>
-                  <FieldDescription>Always use a dark background.</FieldDescription>
+                  <FieldDescription>
+                    Always use a dark background.
+                  </FieldDescription>
                 </FieldContent>
                 <RadioGroupItem value="dark" id="theme-dark" />
               </Field>
@@ -80,5 +99,5 @@ export function SettingsPage() {
         </CardContent>
       </Card>
     </div>
-  )
+  );
 }

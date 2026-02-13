@@ -3,9 +3,11 @@ import {
   countActiveStages,
   createLeadStage,
   deleteLeadStage,
+  getMaxLeadStageOrdering,
   listLeadStages,
   updateLeadStage
 } from "./lead-stage.repo";
+import type { LeadStageColor } from "./lead-stage-colors";
 
 export async function listLeadStagesService() {
   return listLeadStages();
@@ -13,18 +15,23 @@ export async function listLeadStagesService() {
 
 export async function createLeadStageService(input: {
   name: string;
-  ordering: number;
+  color: LeadStageColor;
   isOnboarded?: boolean;
   isActive?: boolean;
 }) {
-  return createLeadStage(input);
+  const maxOrdering = await getMaxLeadStageOrdering();
+
+  return createLeadStage({
+    ...input,
+    ordering: maxOrdering + 1
+  });
 }
 
 export async function updateLeadStageService(
   id: string,
   patch: Partial<{
     name: string;
-    ordering: number;
+    color: LeadStageColor;
     isOnboarded: boolean;
     isActive: boolean;
   }>

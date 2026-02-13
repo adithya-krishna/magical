@@ -1,15 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  flexRender,
-  getCoreRowModel,
-  type ColumnDef,
-  useReactTable,
-} from "@tanstack/react-table";
+import { type ColumnDef } from "@tanstack/react-table";
 import debounce from "lodash/debounce";
 import { Plus, Upload } from "lucide-react";
 import { toast } from "sonner";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -18,15 +12,13 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
+import { DataTable } from "@/components/data-tables/data-table";
+import BadgeIndicator from "@/components/badge-indicator";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+  DEFAULT_PAGE_SIZE,
+  DEFAULT_PAGE_SIZE_OPTIONS,
+  usePaginationConfig,
+} from "@/lib/pagination-config";
 import { LeadDetailsSheet } from "@/pages/leads/lead-details-sheet";
 import {
   LeadFormSheet,
@@ -45,8 +37,6 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-
-const PAGE_SIZE = 25;
 
 function formatDate(value?: string) {
   if (!value) {
@@ -77,9 +67,15 @@ function getErrorMessage(error: unknown, fallback: string) {
 export function LeadsPage() {
   const apiUrl = import.meta.env.VITE_API_URL ?? "http://localhost:4000";
   const queryClient = useQueryClient();
+  const paginationConfigQuery = usePaginationConfig();
+  const pageSizeOptions =
+    paginationConfigQuery.data?.data.pageSizeOptions ?? [...DEFAULT_PAGE_SIZE_OPTIONS];
+  const defaultPageSize =
+    paginationConfigQuery.data?.data.defaultPageSize ?? DEFAULT_PAGE_SIZE;
   const [search, setSearch] = useState("");
   const [searchInput, setSearchInput] = useState("");
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(defaultPageSize);
   const [formOpen, setFormOpen] = useState(false);
   const [editingLead, setEditingLead] = useState<Lead | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
@@ -100,12 +96,18 @@ export function LeadsPage() {
     };
   }, [debouncedSearchUpdate]);
 
+  useEffect(() => {
+    setPageSize((current) =>
+      current === DEFAULT_PAGE_SIZE ? defaultPageSize : current,
+    );
+  }, [defaultPageSize]);
+
   const leadsQuery = useQuery({
-    queryKey: ["leads", search, page],
+    queryKey: ["leads", search, page, pageSize],
     queryFn: async (): Promise<LeadsResponse> => {
       const params = new URLSearchParams({
         page: String(page),
-        pageSize: String(PAGE_SIZE),
+        pageSize: String(pageSize),
       });
 
       if (search.trim()) {
@@ -262,10 +264,10 @@ export function LeadsPage() {
     }
   }, [leadDetailsQuery.isError, leadDetailsQuery.error]);
 
-  const stageNameById = useMemo(() => {
-    const map = new Map<string, string>();
+  const stageById = useMemo(() => {
+    const map = new Map<string, LeadStagesResponse["data"][number]>();
     for (const stage of stagesQuery.data?.data ?? []) {
-      map.set(stage.id, stage.name);
+      map.set(stage.id, stage);
     }
     return map;
   }, [stagesQuery.data?.data]);
@@ -273,6 +275,8 @@ export function LeadsPage() {
   const columns = useMemo<ColumnDef<Lead>[]>(
     () => [
       {
+        id: "name",
+        accessorFn: (row) => `${row.firstName} ${row.lastName}`.trim(),
         header: "Lead",
         cell: ({ row }) => {
           const lead = row.original;
@@ -289,30 +293,39 @@ export function LeadsPage() {
         },
       },
       {
+        id: "email",
+        accessorFn: (row) => row.email ?? "",
+        header: "Email",
+        cell: ({ row }) => row.original.email || "-",
+      },
+      {
         header: "Phone",
         accessorKey: "phone",
-        cell: ({ row }) => {
-          return <div className="font-mono text-xs">{row.original.phone}</div>;
-        },
+        cell: ({ row }) => (
+          <span className="font-mono text-xs">{row.original.phone || "-"}</span>
+        ),
       },
       {
         id: "stage",
+        accessorFn: (row) => stageById.get(row.stageId)?.name ?? "",
+        filterFn: (row, columnId, filterValues) => {
+          const selected = Array.isArray(filterValues)
+            ? (filterValues as string[])
+            : [];
+          if (!selected.length) {
+            return true;
+          }
+          return selected.includes(String(row.getValue(columnId)));
+        },
         header: "Stage",
         cell: ({ row }) => {
-          const stage = stageNameById.get(row.original.stageId);
+          const stage = stageById.get(row.original.stageId);
 
-          if (!stage) {
+          if (!stage?.name) {
             return "-";
           }
 
-          return (
-            <Badge
-              variant="secondary"
-              className="rounded-full px-2.5 py-0.5 text-xs"
-            >
-              {stage}
-            </Badge>
-          );
+          return <BadgeIndicator color={stage.color} title={stage.name} />;
         },
       },
       {
@@ -320,8 +333,18 @@ export function LeadsPage() {
         cell: ({ row }) => formatDate(row.original.followUpDate),
       },
       {
+        id: "follow_up_status",
         header: "Status",
         accessorKey: "followUpStatus",
+        filterFn: (row, columnId, filterValues) => {
+          const selected = Array.isArray(filterValues)
+            ? (filterValues as string[])
+            : [];
+          if (!selected.length) {
+            return true;
+          }
+          return selected.includes(String(row.getValue(columnId)));
+        },
         cell: ({ getValue }) => {
           const value = getValue<Lead["followUpStatus"]>();
           return value === "done" ? "Done" : "Open";
@@ -353,174 +376,108 @@ export function LeadsPage() {
         },
       },
     ],
-    [deleteLeadMutation, stageNameById],
+    [deleteLeadMutation, stageById],
   );
 
   const total = leadsQuery.data?.total ?? 0;
-  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
-  const currentPage = Math.min(page, totalPages);
-
-  const table = useReactTable({
-    data: leadsQuery.data?.data ?? [],
-    columns,
-    getCoreRowModel: getCoreRowModel(),
-  });
 
   const isSaving = createLeadMutation.isPending || updateLeadMutation.isPending;
 
   return (
     <>
       <div className="mx-auto w-full max-w-6xl space-y-6">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-semibold">Leads</h1>
-            <p className="mt-1 text-muted-foreground">
-              Search by name, phone, or email to find incoming leads.
-            </p>
-          </div>
-
-          <div className="flex w-full max-w-xl items-center justify-end gap-2">
-            <Input
-              value={searchInput}
-              onChange={(event) => {
-                const value = event.target.value;
-                setSearchInput(value);
-                debouncedSearchUpdate(value.trim());
-              }}
-              placeholder="Search by name, phone, or email"
-              aria-label="Search leads"
-            />
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  size={"icon"}
-                  onClick={() => {
-                    setEditingLead(null);
-                    setFormOpen(true);
-                  }}
-                >
-                  <Plus className="h-4 w-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>Create lead</p>
-              </TooltipContent>
-            </Tooltip>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button size={"icon"}>
-                  <Upload className="h-4 w-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>Bulk upload</p>
-              </TooltipContent>
-            </Tooltip>
-          </div>
-        </div>
-
         <Card>
           <CardHeader>
-            <CardTitle>Leads directory</CardTitle>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <CardTitle className="text-2xl">Leads</CardTitle>
+              <div className="flex items-center gap-2">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      size={"icon"}
+                      variant={"ghost"}
+                      onClick={() => {
+                        setEditingLead(null);
+                        setFormOpen(true);
+                      }}
+                    >
+                      <Plus className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Create lead</p>
+                  </TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button variant={"ghost"} size={"icon"}>
+                      <Upload className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Bulk upload</p>
+                  </TooltipContent>
+                </Tooltip>
+              </div>
+            </div>
             <CardDescription>
               Review lead status, follow-up timelines, and contact details.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="rounded-md border">
-              <Table>
-                <TableHeader>
-                  {table.getHeaderGroups().map((headerGroup) => (
-                    <TableRow key={headerGroup.id}>
-                      {headerGroup.headers.map((header) => (
-                        <TableHead key={header.id}>
-                          {header.isPlaceholder
-                            ? null
-                            : flexRender(
-                                header.column.columnDef.header,
-                                header.getContext(),
-                              )}
-                        </TableHead>
-                      ))}
-                    </TableRow>
-                  ))}
-                </TableHeader>
-                <TableBody>
-                  {leadsQuery.isLoading ? (
-                    <TableRow>
-                      <TableCell
-                        colSpan={columns.length}
-                        className="h-24 text-center text-muted-foreground"
-                      >
-                        Loading leads...
-                      </TableCell>
-                    </TableRow>
-                  ) : table.getRowModel().rows.length ? (
-                    table.getRowModel().rows.map((row) => (
-                      <TableRow
-                        key={row.id}
-                        className="cursor-pointer"
-                        onClick={() => {
-                          setSelectedLeadId(row.original.id);
-                          setDetailsOpen(true);
-                        }}
-                      >
-                        {row.getVisibleCells().map((cell) => (
-                          <TableCell key={cell.id}>
-                            {flexRender(
-                              cell.column.columnDef.cell,
-                              cell.getContext(),
-                            )}
-                          </TableCell>
-                        ))}
-                      </TableRow>
-                    ))
-                  ) : (
-                    <TableRow>
-                      <TableCell
-                        colSpan={columns.length}
-                        className="h-24 text-center text-muted-foreground"
-                      >
-                        No leads found.
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </div>
+            <DataTable
+              columns={columns}
+              data={leadsQuery.data?.data ?? []}
+              searchableColumnIds={["name", "phone", "email"]}
+              searchPlaceholder="Search by name, phone, or email"
+              filters={[
+                {
+                  title: "Stage",
+                  columnId: "stage",
+                  options: (stagesQuery.data?.data ?? []).map((stage) => ({
+                    label: stage.name,
+                    value: stage.name,
+                  })),
+                },
+                {
+                  title: "Status",
+                  columnId: "follow_up_status",
+                  options: [
+                    { label: "Open", value: "open" },
+                    { label: "Done", value: "done" },
+                  ],
+                },
+              ]}
+              isLoading={leadsQuery.isLoading}
+              loadingMessage="Loading leads..."
+              emptyMessage="No leads found."
+              searchValue={searchInput}
+              onSearchChange={(value) => {
+                setSearchInput(value);
+                debouncedSearchUpdate(value.trim());
+              }}
+              pagination={{
+                page,
+                pageSize,
+                total,
+                onPageChange: setPage,
+                onPageSizeChange: (nextPageSize) => {
+                  setPageSize(nextPageSize);
+                  setPage(1);
+                },
+              }}
+              pageSizeOptions={pageSizeOptions}
+              onRowClick={(lead) => {
+                setSelectedLeadId(lead.id);
+                setDetailsOpen(true);
+              }}
+            />
 
-            <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
-              <div className="text-muted-foreground">
-                {leadsQuery.isError
-                  ? "Unable to load leads."
-                  : `Showing ${table.getRowModel().rows.length} of ${total} leads`}
-                {leadsQuery.isFetching && !leadsQuery.isLoading
-                  ? " • Updating"
-                  : null}
-              </div>
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setPage((prev) => Math.max(1, prev - 1))}
-                  disabled={currentPage <= 1 || leadsQuery.isLoading}
-                >
-                  Previous
-                </Button>
-                <span className="text-muted-foreground">
-                  Page {currentPage} of {totalPages}
-                </span>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() =>
-                    setPage((prev) => Math.min(totalPages, prev + 1))
-                  }
-                  disabled={currentPage >= totalPages || leadsQuery.isLoading}
-                >
-                  Next
-                </Button>
-              </div>
+            <div className="text-sm text-muted-foreground">
+              {leadsQuery.isError
+                ? "Unable to load leads."
+                : `Showing ${leadsQuery.data?.data.length ?? 0} of ${total} leads`}
+              {leadsQuery.isFetching && !leadsQuery.isLoading ? " • Updating" : null}
             </div>
           </CardContent>
         </Card>

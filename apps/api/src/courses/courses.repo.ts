@@ -10,6 +10,7 @@ import {
   sql,
   type SQL
 } from "drizzle-orm";
+import { PAGINATION_DEFAULT_PAGE_SIZE } from "../common/pagination";
 import { db } from "../db";
 import { courseTeachers, courses, instruments, users } from "../db/schema";
 import type {
@@ -19,7 +20,7 @@ import type {
 } from "./courses.types";
 
 const DEFAULT_PAGE = 1;
-const DEFAULT_PAGE_SIZE = 25;
+const DEFAULT_PAGE_SIZE = PAGINATION_DEFAULT_PAGE_SIZE;
 
 export async function listCourses(
   filters: CourseListFilters,

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Link } from "@tanstack/react-router"
-import { flexRender, getCoreRowModel, type ColumnDef, useReactTable } from "@tanstack/react-table"
+import { type ColumnDef } from "@tanstack/react-table"
 import { Plus } from "lucide-react"
 import { toast } from "sonner"
 import {
@@ -18,21 +18,13 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { DataTable } from "@/components/data-tables/data-table"
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { Input } from "@/components/ui/input"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
 import { authClient } from "@/lib/auth-client"
 import { InstrumentFormSheet } from "@/pages/instruments/instrument-form-sheet"
 import type { Instrument, InstrumentFormValues, InstrumentsResponse } from "@/pages/instruments/types"
@@ -138,8 +130,19 @@ export function InstrumentsPage() {
 
   const columns = useMemo<ColumnDef<Instrument>[]>(
     () => [
-      { header: "Name", accessorKey: "name" },
+      { id: "name", header: "Name", accessorKey: "name" },
       {
+        id: "status",
+        accessorFn: (row) => (row.isActive ? "active" : "archived"),
+        filterFn: (row, columnId, filterValues) => {
+          const selected = Array.isArray(filterValues)
+            ? (filterValues as string[])
+            : []
+          if (!selected.length) {
+            return true
+          }
+          return selected.includes(String(row.getValue(columnId)))
+        },
         header: "Status",
         cell: ({ row }) => (
           <Badge variant={row.original.isActive ? "secondary" : "outline"}>
@@ -200,12 +203,6 @@ export function InstrumentsPage() {
     [archiveMutation, canManage]
   )
 
-  const table = useReactTable({
-    data: instrumentsQuery.data?.data ?? [],
-    columns,
-    getCoreRowModel: getCoreRowModel(),
-  })
-
   const isSaving = createMutation.isPending || updateMutation.isPending
 
   useEffect(() => {
@@ -241,48 +238,27 @@ export function InstrumentsPage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <Input
-            placeholder="Search instruments"
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
+          <DataTable
+            columns={columns}
+            data={instrumentsQuery.data?.data ?? []}
+            searchableColumnIds={["name"]}
+            searchPlaceholder="Search instruments"
+            filters={[
+              {
+                title: "Status",
+                columnId: "status",
+                options: [
+                  { label: "Active", value: "active" },
+                  { label: "Archived", value: "archived" },
+                ],
+              },
+            ]}
+            isLoading={instrumentsQuery.isLoading}
+            loadingMessage="Loading instruments..."
+            emptyMessage="No instruments found."
+            searchValue={search}
+            onSearchChange={setSearch}
           />
-
-          <div className="rounded-md border">
-            <Table>
-              <TableHeader>
-                {table.getHeaderGroups().map((headerGroup) => (
-                  <TableRow key={headerGroup.id}>
-                    {headerGroup.headers.map((header) => (
-                      <TableHead key={header.id}>
-                        {header.isPlaceholder
-                          ? null
-                          : flexRender(header.column.columnDef.header, header.getContext())}
-                      </TableHead>
-                    ))}
-                  </TableRow>
-                ))}
-              </TableHeader>
-              <TableBody>
-                {table.getRowModel().rows.length ? (
-                  table.getRowModel().rows.map((row) => (
-                    <TableRow key={row.id}>
-                      {row.getVisibleCells().map((cell) => (
-                        <TableCell key={cell.id}>
-                          {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                        </TableCell>
-                      ))}
-                    </TableRow>
-                  ))
-                ) : (
-                  <TableRow>
-                    <TableCell colSpan={columns.length} className="h-24 text-center text-muted-foreground">
-                      {instrumentsQuery.isLoading ? "Loading..." : "No instruments found."}
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </div>
         </CardContent>
       </Card>
 
