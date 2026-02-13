@@ -1,0 +1,1 @@
+ALTER TABLE "course_plans" ADD COLUMN IF NOT EXISTS "price" integer DEFAULT 0 NOT NULL;

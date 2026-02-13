@@ -8,6 +8,20 @@
       "when": 1770895063147,
       "tag": "0000_wise_living_lightning",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1771200000000,
+      "tag": "0001_users_module",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1771300000000,
+      "tag": "0002_course_plan_price",
+      "breakpoints": true
     }
   ]
 }

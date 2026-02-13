@@ -15,16 +15,19 @@ This flow defines how admissions create classroom assignments, how attendance is
 - Attendance: studentId, classroomSlotId, classDate, status
 
 ## Flow A: Admission creates classroom assignments
-1. Student selects course plan + weekly slots (day/time) + start date.
-2. System validates each selected slot:
+1. Intake starts from either:
+   - an onboarded lead, or
+   - a walk-in student (system creates student + onboarded lead first).
+2. Student/admission flow selects course plan + weekly slots (day/time) + start date.
+3. System validates each selected slot:
    - day is open in OperatingDay
    - time slot exists in TimeSlotTemplate for that day/time
    - ClassroomSlot exists for course + time slot
    - ClassroomSlot capacity is not full
-3. If any selected slot is full, admission is blocked and returns a slot-specific error.
-4. Assign a fixed teacher per selected ClassroomSlot (no load balancing in v1).
-5. Create ClassroomEnrollment records for each selected slot.
-6. Pre-generate Attendance rows for every class date across the plan duration.
+4. If any selected slot is full, admission is blocked and returns a slot-specific error.
+5. Assign a fixed teacher per selected ClassroomSlot (no load balancing in v1).
+6. Create ClassroomEnrollment records for each selected slot.
+7. Pre-generate Attendance rows for every class date across the plan duration.
 
 ## Flow B: Classroom dashboard
 1. For a given day, return TimeSlotTemplates and ClassroomSlots.

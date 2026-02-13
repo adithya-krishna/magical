@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import { z } from "zod";
 import { isAppError } from "../common/errors";
 import {
+  admissionPrerequisitesSchema,
   admissionCreateSchema,
   admissionListSchema,
   admissionUpdateSchema
@@ -10,6 +11,7 @@ import {
   createAdmissionService,
   deleteAdmissionService,
   getAdmissionService,
+  listAdmissionPrerequisitesService,
   listAdmissionsService,
   updateAdmissionService
 } from "./admission.service";
@@ -39,6 +41,30 @@ export async function listAdmissions(req: Request, res: Response) {
     const { page, pageSize, ...filters } = parsed.data;
     const result = await listAdmissionsService(filters, page, pageSize, req.user);
     res.json(result);
+  } catch (error) {
+    handleError(res, error);
+  }
+}
+
+export async function listAdmissionPrerequisites(req: Request, res: Response) {
+  const parsed = admissionPrerequisitesSchema.safeParse(req.query);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.flatten() });
+    return;
+  }
+
+  if (!req.user) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+
+  try {
+    const data = await listAdmissionPrerequisitesService(
+      parsed.data.courseId,
+      parsed.data.leadSearch,
+      req.user
+    );
+    res.json({ data });
   } catch (error) {
     handleError(res, error);
   }

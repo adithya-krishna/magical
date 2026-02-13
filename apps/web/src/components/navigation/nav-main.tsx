@@ -10,7 +10,7 @@ import {
 
 type NavItem = {
   title: string
-  to: "/" | "/leads" | "/courses" | "/instruments"
+  to: "/" | "/leads" | "/admissions" | "/courses" | "/instruments" | "/classroom"
   icon: LucideIcon
 }
 

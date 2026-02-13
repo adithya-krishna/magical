@@ -12,7 +12,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 
-type RequestRole = "staff" | "teacher" | "student" | "admin"
+type RequestRole = "staff" | "teacher" | "admin"
 
 export function RequestAccessPage() {
   const apiUrl = import.meta.env.VITE_API_URL ?? "http://localhost:4000"
@@ -28,7 +28,10 @@ export function RequestAccessPage() {
         <Card>
           <CardHeader>
             <CardTitle>Request Access</CardTitle>
-            <CardDescription>Submit your details for super admin approval.</CardDescription>
+            <CardDescription>
+              Submit your details for super admin approval. Students are provisioned after
+              admissions and do not use this request form.
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <form
@@ -111,7 +114,6 @@ export function RequestAccessPage() {
                   <SelectContent>
                     <SelectItem value="staff">Staff</SelectItem>
                     <SelectItem value="teacher">Teacher</SelectItem>
-                    <SelectItem value="student">Student</SelectItem>
                     <SelectItem value="admin">Admin</SelectItem>
                   </SelectContent>
                 </Select>

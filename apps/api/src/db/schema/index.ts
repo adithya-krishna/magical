@@ -79,6 +79,13 @@ export const rescheduleStatus = pgEnum("reschedule_status", [
   "rejected"
 ]);
 
+export const userPresenceStatus = pgEnum("user_presence_status", [
+  "present",
+  "absent",
+  "late",
+  "excused"
+]);
+
 export const notificationSeverity = pgEnum("notification_severity", [
   "info",
   "warning",
@@ -197,6 +204,57 @@ export const userSettings = pgTable("user_settings", {
     .defaultNow()
 });
 
+export const userProfiles = pgTable("user_profiles", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  userId: uuid("user_id").notNull().unique().references(() => users.id),
+  role: userRole("role").notNull(),
+  department: text("department"),
+  hireDate: date("hire_date"),
+  admissionId: uuid("admission_id").references(() => admissions.id),
+  primaryInstrument: text("primary_instrument"),
+  secondaryInstruments: jsonb("secondary_instruments"),
+  hourlyRate: numeric("hourly_rate", { precision: 10, scale: 2 }),
+  guardianName: text("guardian_name"),
+  guardianPhone: text("guardian_phone"),
+  startDate: date("start_date"),
+  bio: text("bio"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow()
+});
+
+export const userAttendance = pgTable("user_attendance", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  userId: uuid("user_id").notNull().references(() => users.id),
+  workDate: date("work_date").notNull(),
+  status: userPresenceStatus("status").notNull(),
+  notes: text("notes"),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow()
+});
+
+export const studentProgress = pgTable("student_progress", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  studentId: uuid("student_id").notNull().references(() => users.id),
+  skillArea: text("skill_area").notNull(),
+  level: text("level").notNull(),
+  notes: text("notes"),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow()
+});
+
 export const leadStages = pgTable("lead_stages", {
   id: uuid("id").defaultRandom().primaryKey(),
   name: text("name").notNull().unique(),
@@ -296,6 +354,7 @@ export const courseTeachers = pgTable(
 export const coursePlans = pgTable("course_plans", {
   id: uuid("id").defaultRandom().primaryKey(),
   name: text("name").notNull(),
+  price: integer("price").notNull().default(0),
   durationMonths: integer("duration_months").notNull(),
   classesPerWeek: integer("classes_per_week").notNull().default(2),
   totalClasses: integer("total_classes").notNull(),

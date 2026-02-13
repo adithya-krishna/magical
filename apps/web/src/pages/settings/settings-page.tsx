@@ -37,6 +37,7 @@ export function SettingsPage() {
           Update your preferences for appearance and system behavior.
         </p>
       </div>
+
       <Card>
         <CardHeader>
           <CardTitle>Theme</CardTitle>

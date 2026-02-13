@@ -60,3 +60,8 @@ Teacher attendance
 
 ## Notes
 - Scheduling visibility will be handled in the Schedule module later.
+
+## Parity Notes
+- Page-level RBAC is enforced as the source of truth for both API and UI visibility.
+- Effective hierarchy is `admins > staff > teachers > students`.
+- Teachers can access their own teacher pages in read-only mode; management actions remain admin/super_admin scoped.

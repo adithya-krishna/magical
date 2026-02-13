@@ -7,7 +7,16 @@ export type WeeklySlotInput = {
   dayOfWeek?: number;
 };
 
+export type WalkInStudentInput = {
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone?: string;
+  password: string;
+};
+
 export type AdmissionListFilters = {
+  search?: string;
   status?: AdmissionStatus;
   coursePlanId?: string;
   ownerId?: string;
@@ -16,8 +25,9 @@ export type AdmissionListFilters = {
 };
 
 export type AdmissionCreateInput = {
-  leadId: string;
+  leadId?: string;
   studentId?: string;
+  walkInStudent?: WalkInStudentInput;
   coursePlanId: string;
   courseId: string;
   startDate: string;
@@ -35,6 +45,7 @@ export type AdmissionUpdateInput = Partial<
 
 export type CoursePlanCreateInput = {
   name: string;
+  price: number;
   durationMonths: number;
   classesPerWeek?: number;
   isActive?: boolean;

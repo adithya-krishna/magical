@@ -53,3 +53,8 @@ Admins attendance
 ## FE behaviors
 - Users accordion renders Admins only for super_admin.
 - Admin detail pages use tabs and keep URL state in sub-routes.
+
+## Parity Notes
+- Page-level RBAC is enforced as the source of truth for both API and UI visibility.
+- Effective hierarchy is `admins > staff > teachers > students`.
+- Admins list and admin management pages remain super_admin-only; admins can access only their own admin pages in read-only mode.

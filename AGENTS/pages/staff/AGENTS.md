@@ -54,3 +54,8 @@ Staff attendance
 ## FE behaviors
 - Users accordion renders Staff based on role.
 - Staff detail pages use tabs and keep URL state in sub-routes.
+
+## Parity Notes
+- Page-level RBAC is enforced as the source of truth for both API and UI visibility.
+- Effective hierarchy is `admins > staff > teachers > students`.
+- Staff can access their own staff pages in read-only mode; create/update flows are restricted to admin/super_admin.

@@ -339,6 +339,7 @@ export function LeadsPage() {
 
           return (
             <LeadRowActions
+              leadId={lead.id}
               leadName={`${lead.firstName} ${lead.lastName}`}
               onUpdate={() => {
                 setEditingLead(lead);

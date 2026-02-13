@@ -9,6 +9,7 @@ import {
 import {
   createCoursePlanService,
   deleteCoursePlanService,
+  getCoursePlanService,
   listCoursePlansService,
   updateCoursePlanService
 } from "./course-plan.service";
@@ -47,6 +48,21 @@ export async function createCoursePlan(req: Request, res: Response) {
   try {
     const plan = await createCoursePlanService(parsed.data);
     res.status(201).json({ data: plan });
+  } catch (error) {
+    handleError(res, error);
+  }
+}
+
+export async function getCoursePlan(req: Request, res: Response) {
+  const params = z.object({ id: z.string().uuid() }).safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: params.error.flatten() });
+    return;
+  }
+
+  try {
+    const plan = await getCoursePlanService(params.data.id);
+    res.json({ data: plan });
   } catch (error) {
     handleError(res, error);
   }

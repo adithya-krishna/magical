@@ -8,6 +8,7 @@ import {
   createTimeSlot,
   deactivateClassroomSlot,
   deactivateTimeSlot,
+  existsCourseTeacherAssignment,
   existsClassroomSlotForCourseTeacher,
   getAdmissionForStudentCourse,
   getAttendanceById,
@@ -161,6 +162,11 @@ export async function createClassroomSlotService(
     throw new AppError(400, "Teacher not found");
   }
 
+  const isAssignedToCourse = await existsCourseTeacherAssignment(input.courseId, input.teacherId);
+  if (!isAssignedToCourse) {
+    throw new AppError(400, "Teacher must be assigned to this course");
+  }
+
   const existing = await getClassroomSlotByTimeSlotAndCourse(input.timeSlotId, input.courseId);
   if (existing) {
     throw new AppError(409, "Classroom slot already exists for this course and time slot");
@@ -206,6 +212,13 @@ export async function updateClassroomSlotService(
     if (!teacher || teacher.role !== "teacher") {
       throw new AppError(400, "Teacher not found");
     }
+  }
+
+  const nextCourseId = patch.courseId ?? existing.courseId;
+  const nextTeacherId = patch.teacherId ?? existing.teacherId;
+  const isAssignedToCourse = await existsCourseTeacherAssignment(nextCourseId, nextTeacherId);
+  if (!isAssignedToCourse) {
+    throw new AppError(400, "Teacher must be assigned to this course");
   }
 
   const updated = await updateClassroomSlot(id, patch);
