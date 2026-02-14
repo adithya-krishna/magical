@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import { type ColumnDef } from "@tanstack/react-table"
 import { toast } from "sonner"
 import {
   AlertDialog,
@@ -15,14 +16,7 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
+import { DataTable } from "@/components/data-tables/data-table"
 import { formatInrFromMinor } from "@/lib/money"
 import type { CoursePlan, CoursePlansResponse } from "@/pages/admissions/types"
 import { CoursePlanFormSheet, type CoursePlanFormValues } from "@/pages/courses/course-plan-form-sheet"
@@ -143,6 +137,90 @@ export function CoursePlansTab({ canManage }: CoursePlansTabProps) {
   })
 
   const isSaving = createMutation.isPending || updateMutation.isPending
+  const plans = plansQuery.data?.data ?? []
+
+  const columns: ColumnDef<CoursePlan>[] = [
+    { id: "name", header: "Name", accessorKey: "name" },
+    {
+      id: "price",
+      accessorKey: "price",
+      header: "Price",
+      cell: ({ row }) => formatInrFromMinor(row.original.price),
+    },
+    {
+      id: "duration_months",
+      accessorKey: "durationMonths",
+      header: "Duration",
+      cell: ({ row }) => `${row.original.durationMonths} months`,
+    },
+    {
+      id: "classes_per_week",
+      accessorKey: "classesPerWeek",
+      header: "Classes/week",
+    },
+    {
+      id: "total_classes",
+      accessorKey: "totalClasses",
+      header: "Total classes",
+    },
+    {
+      id: "status",
+      accessorFn: (row) => (row.isActive ? "active" : "inactive"),
+      filterFn: (row, columnId, filterValues) => {
+        const selected = Array.isArray(filterValues) ? (filterValues as string[]) : []
+        if (!selected.length) return true
+        return selected.includes(String(row.getValue(columnId)))
+      },
+      header: "Status",
+      cell: ({ row }) => (
+        <Badge variant={row.original.isActive ? "secondary" : "outline"}>
+          {row.original.isActive ? "Active" : "Inactive"}
+        </Badge>
+      ),
+    },
+    {
+      id: "actions",
+      header: "",
+      cell: ({ row }) =>
+        canManage ? (
+          <div className="flex items-center justify-end gap-2">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={(event) => {
+                event.stopPropagation()
+                setEditingPlan(row.original)
+                setFormOpen(true)
+              }}
+            >
+              Edit
+            </Button>
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button type="button" size="sm" variant="destructive" onClick={(event) => event.stopPropagation()}>
+                  Delete
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Delete course plan?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    This removes {row.original.name}. Existing admissions keep stored totals.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction onClick={() => deleteMutation.mutate(row.original.id)}>
+                    Delete
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          </div>
+        ) : null,
+    },
+  ]
 
   return (
     <Card>
@@ -155,82 +233,25 @@ export function CoursePlansTab({ canManage }: CoursePlansTabProps) {
       <CardContent className="space-y-4">
         {canManage ? <Button onClick={() => setFormOpen(true)}>New Course Plan</Button> : null}
 
-        <div className="rounded-md border">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Price</TableHead>
-                <TableHead>Duration</TableHead>
-                <TableHead>Classes/week</TableHead>
-                <TableHead>Total classes</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="w-32" />
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {(plansQuery.data?.data ?? []).map((plan) => (
-                <TableRow key={plan.id}>
-                  <TableCell>{plan.name}</TableCell>
-                  <TableCell>{formatInrFromMinor(plan.price)}</TableCell>
-                  <TableCell>{plan.durationMonths} months</TableCell>
-                  <TableCell>{plan.classesPerWeek}</TableCell>
-                  <TableCell>{plan.totalClasses}</TableCell>
-                  <TableCell>
-                    <Badge variant={plan.isActive ? "secondary" : "outline"}>
-                      {plan.isActive ? "Active" : "Inactive"}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    {canManage ? (
-                      <div className="flex items-center justify-end gap-2">
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          onClick={() => {
-                            setEditingPlan(plan)
-                            setFormOpen(true)
-                          }}
-                        >
-                          Edit
-                        </Button>
-                        <AlertDialog>
-                          <AlertDialogTrigger asChild>
-                            <Button type="button" size="sm" variant="destructive">
-                              Delete
-                            </Button>
-                          </AlertDialogTrigger>
-                          <AlertDialogContent>
-                            <AlertDialogHeader>
-                              <AlertDialogTitle>Delete course plan?</AlertDialogTitle>
-                              <AlertDialogDescription>
-                                This removes {plan.name}. Existing admissions keep stored totals.
-                              </AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                              <AlertDialogCancel>Cancel</AlertDialogCancel>
-                              <AlertDialogAction onClick={() => deleteMutation.mutate(plan.id)}>
-                                Delete
-                              </AlertDialogAction>
-                            </AlertDialogFooter>
-                          </AlertDialogContent>
-                        </AlertDialog>
-                      </div>
-                    ) : null}
-                  </TableCell>
-                </TableRow>
-              ))}
-              {!plansQuery.data?.data?.length ? (
-                <TableRow>
-                  <TableCell colSpan={7} className="h-20 text-center text-muted-foreground">
-                    {plansQuery.isLoading ? "Loading course plans..." : "No course plans available."}
-                  </TableCell>
-                </TableRow>
-              ) : null}
-            </TableBody>
-          </Table>
-        </div>
+        <DataTable
+          columns={columns}
+          data={plans}
+          searchableColumnIds={["name"]}
+          searchPlaceholder="Search course plans"
+          filters={[
+            {
+              title: "Status",
+              columnId: "status",
+              options: [
+                { label: "Active", value: "active" },
+                { label: "Inactive", value: "inactive" },
+              ],
+            },
+          ]}
+          isLoading={plansQuery.isLoading}
+          loadingMessage="Loading course plans..."
+          emptyMessage="No course plans available."
+        />
 
         <CoursePlanFormSheet
           open={formOpen}

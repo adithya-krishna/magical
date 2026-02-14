@@ -258,6 +258,7 @@ export const studentProgress = pgTable("student_progress", {
 export const leadStages = pgTable("lead_stages", {
   id: uuid("id").defaultRandom().primaryKey(),
   name: text("name").notNull().unique(),
+  color: text("color").notNull().default("bg-slate-500"),
   ordering: integer("ordering").notNull(),
   isOnboarded: boolean("is_onboarded").notNull().default(false),
   isActive: boolean("is_active").notNull().default(true)
@@ -269,6 +270,19 @@ export const leads = pgTable("leads", {
   lastName: text("last_name").notNull(),
   phone: text("phone").notNull(),
   email: text("email"),
+  area: text("area"),
+  community: text("community"),
+  address: text("address"),
+  guardianName: text("guardian_name"),
+  age: integer("age"),
+  expectedBudget: integer("expected_budget").notNull().default(0),
+  numberOfContactAttempts: integer("number_of_contact_attempts").notNull().default(0),
+  lastContactedDate: timestamp("last_contacted_date", { withTimezone: true }),
+  nextFollowUp: timestamp("next_followup", { withTimezone: true }),
+  walkInDate: date("walkin_date"),
+  assignedTeacherId: uuid("assigned_teacher_id").references(() => users.id),
+  demoDate: date("demo_date"),
+  demoConducted: boolean("demo_conducted").notNull().default(false),
   interest: text("interest"),
   source: text("source"),
   stageId: uuid("stage_id").notNull().references(() => leadStages.id),
@@ -289,6 +303,16 @@ export const leadNotes = pgTable("lead_notes", {
   id: uuid("id").defaultRandom().primaryKey(),
   leadId: uuid("lead_id").notNull().references(() => leads.id),
   body: text("body").notNull(),
+  createdBy: uuid("created_by").notNull().references(() => users.id),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow()
+});
+
+export const leadTags = pgTable("lead_tags", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  leadId: uuid("lead_id").notNull().references(() => leads.id),
+  label: text("label").notNull(),
   createdBy: uuid("created_by").notNull().references(() => users.id),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()

@@ -1,130 +1,131 @@
-import { useEffect, useMemo, useState } from "react"
-import { useQuery, useQueryClient } from "@tanstack/react-query"
-import { flexRender, getCoreRowModel, type ColumnDef, useReactTable } from "@tanstack/react-table"
-import debounce from "lodash/debounce"
-import { Plus } from "lucide-react"
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
+import { useEffect, useMemo, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { type ColumnDef } from "@tanstack/react-table";
+import debounce from "lodash/debounce";
+import { Plus } from "lucide-react";
+import { DataTable } from "@/components/data-tables/data-table";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
+  DEFAULT_PAGE_SIZE,
+  DEFAULT_PAGE_SIZE_OPTIONS,
+  usePaginationConfig,
+} from "@/lib/pagination-config";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
-import { toast } from "sonner"
-import { authClient } from "@/lib/auth-client"
-import { AdmissionFormSheet } from "@/pages/admissions/admission-form-sheet"
-import type { Admission, AdmissionsResponse, CoursePlansResponse } from "@/pages/admissions/types"
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { toast } from "sonner";
+import { authClient } from "@/lib/auth-client";
+import { AdmissionFormSheet } from "@/pages/admissions/admission-form-sheet";
+import type {
+  Admission,
+  AdmissionsResponse,
+  CoursePlansResponse,
+} from "@/pages/admissions/types";
 
-type AppRole = "super_admin" | "admin" | "staff" | "teacher" | "student"
-
-const PAGE_SIZE = 25
+type AppRole = "super_admin" | "admin" | "staff" | "teacher" | "student";
 
 function getErrorMessage(error: unknown, fallback: string) {
   if (error && typeof error === "object" && "message" in error) {
-    const message = (error as { message?: unknown }).message
+    const message = (error as { message?: unknown }).message;
     if (typeof message === "string") {
-      return message
+      return message;
     }
   }
 
-  return fallback
+  return fallback;
 }
 
 function formatDate(value: string) {
-  const date = new Date(value)
+  const date = new Date(value);
   if (Number.isNaN(date.getTime())) {
-    return value
+    return value;
   }
-  return date.toLocaleDateString()
+  return date.toLocaleDateString();
 }
 
 function roleCanViewAdmissions(role: AppRole) {
-  return role === "super_admin" || role === "admin" || role === "staff"
+  return role === "super_admin" || role === "admin" || role === "staff";
 }
 
 export function AdmissionsPage() {
-  const apiUrl = import.meta.env.VITE_API_URL ?? "http://localhost:4000"
-  const session = authClient.useSession()
-  const queryClient = useQueryClient()
-  const role = ((session.data?.user as { role?: AppRole } | undefined)?.role ?? "student")
-  const canViewAdmissions = roleCanViewAdmissions(role)
-  const canCreateAdmissions = canViewAdmissions
-  const [status, setStatus] = useState<string>("all")
-  const [coursePlanId, setCoursePlanId] = useState<string>("all")
-  const [search, setSearch] = useState("")
-  const [searchInput, setSearchInput] = useState("")
-  const [page, setPage] = useState(1)
-  const [createOpen, setCreateOpen] = useState(false)
-  const [initialLeadId, setInitialLeadId] = useState<string | null>(null)
+  const apiUrl = import.meta.env.VITE_API_URL ?? "http://localhost:4000";
+  const session = authClient.useSession();
+  const queryClient = useQueryClient();
+  const paginationConfigQuery = usePaginationConfig();
+  const pageSizeOptions =
+    paginationConfigQuery.data?.data.pageSizeOptions ?? [...DEFAULT_PAGE_SIZE_OPTIONS];
+  const defaultPageSize =
+    paginationConfigQuery.data?.data.defaultPageSize ?? DEFAULT_PAGE_SIZE;
+  const role =
+    (session.data?.user as { role?: AppRole } | undefined)?.role ?? "student";
+  const canViewAdmissions = roleCanViewAdmissions(role);
+  const canCreateAdmissions = canViewAdmissions;
+  const [search, setSearch] = useState("");
+  const [searchInput, setSearchInput] = useState("");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(defaultPageSize);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [initialLeadId, setInitialLeadId] = useState<string | null>(null);
 
   const debouncedSearchUpdate = useMemo(
     () =>
       debounce((value: string) => {
-        setSearch(value)
-        setPage(1)
+        setSearch(value);
+        setPage(1);
       }, 300),
-    []
-  )
+    [],
+  );
 
   useEffect(() => {
     return () => {
-      debouncedSearchUpdate.cancel()
-    }
-  }, [debouncedSearchUpdate])
+      debouncedSearchUpdate.cancel();
+    };
+  }, [debouncedSearchUpdate]);
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search)
-    const leadId = params.get("leadId")
+    setPageSize((current) =>
+      current === DEFAULT_PAGE_SIZE ? defaultPageSize : current,
+    );
+  }, [defaultPageSize]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const leadId = params.get("leadId");
     if (leadId) {
-      setInitialLeadId(leadId)
-      setCreateOpen(true)
+      setInitialLeadId(leadId);
+      setCreateOpen(true);
     }
-  }, [])
+  }, []);
 
   const admissionsQuery = useQuery({
-    queryKey: ["admissions", status, coursePlanId, search, page],
+    queryKey: ["admissions", search, page, pageSize],
     enabled: canViewAdmissions,
     queryFn: async (): Promise<AdmissionsResponse> => {
       const params = new URLSearchParams({
         page: String(page),
-        pageSize: String(PAGE_SIZE),
-      })
-
-      if (status !== "all") {
-        params.set("status", status)
-      }
-
-      if (coursePlanId !== "all") {
-        params.set("coursePlanId", coursePlanId)
-      }
+        pageSize: String(pageSize),
+      });
 
       if (search.trim()) {
-        params.set("search", search.trim())
+        params.set("search", search.trim());
       }
 
       const response = await fetch(`${apiUrl}/api/v1/admissions?${params}`, {
         credentials: "include",
-      })
+      });
 
       if (!response.ok) {
-        throw new Error("Failed to load admissions")
+        throw new Error("Failed to load admissions");
       }
 
-      return response.json()
+      return response.json();
     },
-  })
+  });
 
   const coursePlansQuery = useQuery({
     queryKey: ["course-plans", "all"],
@@ -132,28 +133,31 @@ export function AdmissionsPage() {
     queryFn: async (): Promise<CoursePlansResponse> => {
       const response = await fetch(`${apiUrl}/api/v1/course-plans`, {
         credentials: "include",
-      })
+      });
 
       if (!response.ok) {
-        throw new Error("Failed to load course plans")
+        throw new Error("Failed to load course plans");
       }
 
-      return response.json()
+      return response.json();
     },
-  })
+  });
 
   useEffect(() => {
     if (admissionsQuery.isError) {
-      toast.error(getErrorMessage(admissionsQuery.error, "Unable to load admissions."))
+      toast.error(
+        getErrorMessage(admissionsQuery.error, "Unable to load admissions."),
+      );
     }
-  }, [admissionsQuery.isError, admissionsQuery.error])
+  }, [admissionsQuery.isError, admissionsQuery.error]);
 
   useEffect(() => {
     if (coursePlansQuery.isError) {
-      toast.error(getErrorMessage(coursePlansQuery.error, "Unable to load course plans."))
+      toast.error(
+        getErrorMessage(coursePlansQuery.error, "Unable to load course plans."),
+      );
     }
-  }, [coursePlansQuery.isError, coursePlansQuery.error])
-
+  }, [coursePlansQuery.isError, coursePlansQuery.error]);
 
   if (!canViewAdmissions) {
     return (
@@ -161,23 +165,38 @@ export function AdmissionsPage() {
         <CardHeader>
           <CardTitle>Admissions</CardTitle>
           <CardDescription>
-            You do not have permission to view admissions. This page is available to super admins, admins, and staff.
+            You do not have permission to view admissions. This page is
+            available to super admins, admins, and staff.
           </CardDescription>
         </CardHeader>
       </Card>
-    )
+    );
   }
 
-  const columns: ColumnDef<{ admission: Admission; lead: Admission["lead"] }>[] = [
+  const columns: ColumnDef<{
+    admission: Admission;
+    lead: Admission["lead"];
+  }>[] = [
     {
+      id: "admission_id",
+      accessorFn: (row) => row.admission.id,
       header: "Admission",
-      cell: ({ row }) => <span className="font-mono text-xs">{row.original.admission.id}</span>,
+      cell: ({ row }) => (
+        <span className="font-mono text-xs">{row.original.admission.id}</span>
+      ),
     },
     {
+      id: "lead_name",
+      accessorFn: (row) =>
+        `${row.lead?.firstName ?? ""} ${row.lead?.lastName ?? ""}`.trim(),
       header: "Lead",
       cell: ({ row }) => {
         if (!row.original.lead) {
-          return <span className="font-mono text-xs">{row.original.admission.leadId}</span>
+          return (
+            <span className="font-mono text-xs">
+              {row.original.admission.leadId}
+            </span>
+          );
         }
 
         return (
@@ -190,14 +209,46 @@ export function AdmissionsPage() {
               {row.original.lead.email ? ` • ${row.original.lead.email}` : ""}
             </div>
           </div>
-        )
+        );
       },
     },
     {
+      id: "lead_phone",
+      accessorFn: (row) => row.lead?.phone ?? "",
+      header: "Phone",
+      cell: ({ row }) => (
+        <span className="font-mono text-xs">
+          {row.original.lead?.phone ?? "-"}
+        </span>
+      ),
+    },
+    {
+      id: "lead_email",
+      accessorFn: (row) => row.lead?.email ?? "",
+      header: "Email",
+      cell: ({ row }) => row.original.lead?.email ?? "-",
+    },
+    {
+      id: "course_plan",
+      accessorFn: (row) =>
+        (coursePlansQuery.data?.data ?? []).find(
+          (plan) => plan.id === row.admission.coursePlanId,
+        )?.name ?? row.admission.coursePlanId,
+      filterFn: (row, columnId, filterValues) => {
+        const selected = Array.isArray(filterValues)
+          ? (filterValues as string[])
+          : [];
+        if (!selected.length) {
+          return true;
+        }
+        return selected.includes(String(row.getValue(columnId)));
+      },
       header: "Plan",
       cell: ({ row }) => {
-        const planName = (coursePlansQuery.data?.data ?? []).find((plan) => plan.id === row.original.admission.coursePlanId)?.name
-        return planName ?? row.original.admission.coursePlanId
+        const planName = (coursePlansQuery.data?.data ?? []).find(
+          (plan) => plan.id === row.original.admission.coursePlanId,
+        )?.name;
+        return planName ?? row.original.admission.coursePlanId;
       },
     },
     {
@@ -210,27 +261,37 @@ export function AdmissionsPage() {
       cell: ({ row }) => formatDate(row.original.admission.startDate),
     },
     {
+      id: "status",
+      accessorFn: (row) => row.admission.status,
+      filterFn: (row, columnId, filterValues) => {
+        const selected = Array.isArray(filterValues)
+          ? (filterValues as string[])
+          : [];
+        if (!selected.length) {
+          return true;
+        }
+        return selected.includes(String(row.getValue(columnId)));
+      },
       header: "Status",
       cell: ({ row }) => (
-        <Badge variant={row.original.admission.status === "active" ? "secondary" : "outline"}>
+        <Badge
+          variant={
+            row.original.admission.status === "active" ? "secondary" : "outline"
+          }
+        >
           {row.original.admission.status}
         </Badge>
       ),
     },
     {
+      id: "created_at",
+      accessorFn: (row) => row.admission.createdAt,
       header: "Created",
       cell: ({ row }) => formatDate(row.original.admission.createdAt),
     },
-  ]
+  ];
 
-  const table = useReactTable({
-    data: admissionsQuery.data?.data ?? [],
-    columns,
-    getCoreRowModel: getCoreRowModel(),
-  })
-
-  const total = admissionsQuery.data?.total ?? 0
-  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
+  const total = admissionsQuery.data?.total ?? 0;
 
   return (
     <div className="mx-auto w-full max-w-6xl space-y-6">
@@ -252,139 +313,78 @@ export function AdmissionsPage() {
       <Card>
         <CardHeader>
           <CardTitle>Admissions list</CardTitle>
-          <CardDescription>Filter by status and course plan.</CardDescription>
+          <CardDescription>
+            Search contacts and filter by status or course details.
+          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <Input
-            value={searchInput}
-            onChange={(event) => {
-              const value = event.target.value
-              setSearchInput(value)
-              debouncedSearchUpdate(value.trim())
+          <DataTable
+            columns={columns}
+            data={admissionsQuery.data?.data ?? []}
+            searchableColumnIds={["lead_name", "lead_phone", "lead_email"]}
+            searchPlaceholder="Search by lead name, phone, or email"
+            filters={[
+              {
+                title: "Status",
+                columnId: "status",
+                options: [
+                  { label: "Pending", value: "pending" },
+                  { label: "Active", value: "active" },
+                  { label: "Completed", value: "completed" },
+                  { label: "Cancelled", value: "cancelled" },
+                ],
+              },
+              {
+                title: "Course Plan",
+                columnId: "course_plan",
+                options: (coursePlansQuery.data?.data ?? []).map((plan) => ({
+                  label: plan.name,
+                  value: plan.name,
+                })),
+              },
+            ]}
+            initialColumnVisibility={{
+              lead_phone: false,
+              lead_email: false,
             }}
-            placeholder="Search by lead name, phone, or email"
+            pagination={{
+              page,
+              pageSize,
+              total,
+              onPageChange: setPage,
+              onPageSizeChange: (nextPageSize) => {
+                setPageSize(nextPageSize);
+                setPage(1);
+              },
+            }}
+            pageSizeOptions={pageSizeOptions}
+            isLoading={admissionsQuery.isLoading}
+            loadingMessage="Loading admissions..."
+            emptyMessage="No admissions found."
+            searchValue={searchInput}
+            onSearchChange={(value) => {
+              setSearchInput(value);
+              debouncedSearchUpdate(value.trim());
+            }}
           />
 
-          <div className="grid gap-3 md:grid-cols-2">
-            <Select
-              value={status}
-              onValueChange={(value) => {
-                setStatus(value)
-                setPage(1)
-              }}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All statuses</SelectItem>
-                <SelectItem value="pending">Pending</SelectItem>
-                <SelectItem value="active">Active</SelectItem>
-                <SelectItem value="completed">Completed</SelectItem>
-                <SelectItem value="cancelled">Cancelled</SelectItem>
-              </SelectContent>
-            </Select>
-
-            <Select
-              value={coursePlanId}
-              onValueChange={(value) => {
-                setCoursePlanId(value)
-                setPage(1)
-              }}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Course plan" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All plans</SelectItem>
-                {(coursePlansQuery.data?.data ?? []).map((plan) => (
-                  <SelectItem key={plan.id} value={plan.id}>
-                    {plan.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="rounded-md border">
-            <Table>
-              <TableHeader>
-                {table.getHeaderGroups().map((headerGroup) => (
-                  <TableRow key={headerGroup.id}>
-                    {headerGroup.headers.map((header) => (
-                      <TableHead key={header.id}>
-                        {header.isPlaceholder
-                          ? null
-                          : flexRender(header.column.columnDef.header, header.getContext())}
-                      </TableHead>
-                    ))}
-                  </TableRow>
-                ))}
-              </TableHeader>
-              <TableBody>
-                {table.getRowModel().rows.length ? (
-                  table.getRowModel().rows.map((row) => (
-                    <TableRow key={row.id}>
-                      {row.getVisibleCells().map((cell) => (
-                        <TableCell key={cell.id}>
-                          {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                        </TableCell>
-                      ))}
-                    </TableRow>
-                  ))
-                ) : (
-                  <TableRow>
-                    <TableCell colSpan={columns.length} className="h-24 text-center text-muted-foreground">
-                      {admissionsQuery.isLoading ? "Loading admissions..." : "No admissions found."}
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </div>
-
-          <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
-            <div className="text-muted-foreground">Total {total} admissions</div>
-            <div className="flex items-center gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => setPage((prev) => Math.max(1, prev - 1))}
-                disabled={page <= 1 || admissionsQuery.isLoading}
-              >
-                Previous
-              </Button>
-              <span className="text-muted-foreground">
-                Page {page} of {totalPages}
-              </span>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))}
-                disabled={page >= totalPages || admissionsQuery.isLoading}
-              >
-                Next
-              </Button>
-            </div>
-          </div>
+          <div className="text-sm text-muted-foreground">Total {total} admissions</div>
         </CardContent>
       </Card>
 
       <AdmissionFormSheet
         open={createOpen}
         onOpenChange={(open) => {
-          setCreateOpen(open)
+          setCreateOpen(open);
         }}
         initialLeadId={initialLeadId}
         onCreated={async (studentId) => {
-          await queryClient.invalidateQueries({ queryKey: ["admissions"] })
+          await queryClient.invalidateQueries({ queryKey: ["admissions"] });
           if (studentId) {
-            toast.success("Student account created as part of admission")
+            toast.success("Student account created as part of admission");
           }
         }}
       />
     </div>
-  )
+  );
 }

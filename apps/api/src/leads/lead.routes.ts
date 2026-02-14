@@ -5,18 +5,30 @@ import {
   bulkUpload,
   createLead,
   deleteLead,
+  getLeadDetails,
   getLead,
+  listLeadHistory,
+  listLeadNotes,
   listLeads,
-  updateLead
+  updateLead,
+  updateLeadProfile,
+  updateLeadWorkflow,
+  upsertLeadTags
 } from "./lead.controller";
 
 export const leadsRouter = Router();
 
 leadsRouter.use(requireAuth);
 
-leadsRouter.get("/", requireRole(["super_admin", "admin", "staff"]), listLeads);
+leadsRouter.get("/", requireRole(["super_admin", "admin", "staff", "teacher"]), listLeads);
 leadsRouter.post("/", requireRole(["super_admin", "admin", "staff"]), createLead);
-leadsRouter.post("/:id/notes", requireRole(["super_admin", "admin", "staff"]), addLeadNote);
+leadsRouter.get("/:id/details", requireRole(["super_admin", "admin", "staff", "teacher"]), getLeadDetails);
+leadsRouter.get("/:id/notes", requireRole(["super_admin", "admin", "staff", "teacher"]), listLeadNotes);
+leadsRouter.post("/:id/notes", requireRole(["super_admin", "admin", "staff", "teacher"]), addLeadNote);
+leadsRouter.get("/:id/history", requireRole(["super_admin", "admin", "staff", "teacher"]), listLeadHistory);
+leadsRouter.patch("/:id/workflow", requireRole(["super_admin", "admin", "staff"]), updateLeadWorkflow);
+leadsRouter.patch("/:id/profile", requireRole(["super_admin", "admin", "staff"]), updateLeadProfile);
+leadsRouter.put("/:id/tags", requireRole(["super_admin", "admin", "staff"]), upsertLeadTags);
 
 leadsRouter.post(
   "/bulk",
@@ -34,6 +46,6 @@ leadsRouter.get(
   }
 );
 
-leadsRouter.get("/:id", requireRole(["super_admin", "admin", "staff"]), getLead);
+leadsRouter.get("/:id", requireRole(["super_admin", "admin", "staff", "teacher"]), getLead);
 leadsRouter.patch("/:id", requireRole(["super_admin", "admin", "staff"]), updateLead);
 leadsRouter.delete("/:id", requireRole(["super_admin", "admin", "staff"]), deleteLead);

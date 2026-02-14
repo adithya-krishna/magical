@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Link } from "@tanstack/react-router"
-import { flexRender, getCoreRowModel, type ColumnDef, useReactTable } from "@tanstack/react-table"
+import { type ColumnDef } from "@tanstack/react-table"
 import debounce from "lodash/debounce"
 import { Plus } from "lucide-react"
 import { toast } from "sonner"
@@ -19,30 +19,20 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { DataTable } from "@/components/data-tables/data-table"
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { Input } from "@/components/ui/input"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { authClient } from "@/lib/auth-client"
+import {
+  DEFAULT_PAGE_SIZE,
+  DEFAULT_PAGE_SIZE_OPTIONS,
+  usePaginationConfig,
+} from "@/lib/pagination-config"
 import { CoursePlansTab } from "@/pages/courses/course-plans-tab"
 import { CourseDetailsSheet } from "@/pages/courses/course-details-sheet"
 import { CourseFormSheet } from "@/pages/courses/course-form-sheet"
@@ -57,8 +47,6 @@ import type {
 } from "@/pages/courses/types"
 import type { InstrumentsResponse } from "@/pages/instruments/types"
 
-const PAGE_SIZE = 25
-
 function getErrorMessage(error: unknown, fallback: string) {
   if (error && typeof error === "object" && "message" in error) {
     const message = (error as { message?: unknown }).message
@@ -72,17 +60,18 @@ function getErrorMessage(error: unknown, fallback: string) {
 export function CoursesPage() {
   const apiUrl = import.meta.env.VITE_API_URL ?? "http://localhost:4000"
   const queryClient = useQueryClient()
+  const paginationConfigQuery = usePaginationConfig()
+  const pageSizeOptions =
+    paginationConfigQuery.data?.data.pageSizeOptions ?? [...DEFAULT_PAGE_SIZE_OPTIONS]
+  const defaultPageSize =
+    paginationConfigQuery.data?.data.defaultPageSize ?? DEFAULT_PAGE_SIZE
   const session = authClient.useSession()
   const role = (session.data?.user as { role?: string } | undefined)?.role
   const canManage = role === "super_admin" || role === "admin"
   const [searchInput, setSearchInput] = useState("")
   const [search, setSearch] = useState("")
   const [page, setPage] = useState(1)
-  const [difficulty, setDifficulty] = useState<string>("all")
-  const [instrumentId, setInstrumentId] = useState<string>("all")
-  const [activeStatus, setActiveStatus] = useState<string>("all")
-  const [sortBy, setSortBy] = useState<string>("name")
-  const [sortOrder, setSortOrder] = useState<string>("asc")
+  const [pageSize, setPageSize] = useState(defaultPageSize)
   const [formOpen, setFormOpen] = useState(false)
   const [editingCourse, setEditingCourse] = useState<Course | null>(null)
   const [detailsOpen, setDetailsOpen] = useState(false)
@@ -98,6 +87,10 @@ export function CoursesPage() {
   )
 
   useEffect(() => () => debouncedSearch.cancel(), [debouncedSearch])
+
+  useEffect(() => {
+    setPageSize((current) => (current === DEFAULT_PAGE_SIZE ? defaultPageSize : current))
+  }, [defaultPageSize])
 
   const instrumentsQuery = useQuery({
     queryKey: ["instruments", "all"],
@@ -124,15 +117,12 @@ export function CoursesPage() {
   })
 
   const coursesQuery = useQuery({
-    queryKey: ["courses", search, page, difficulty, instrumentId, activeStatus, sortBy, sortOrder],
+    queryKey: ["courses", search, page, pageSize],
     queryFn: async (): Promise<CoursesResponse> => {
-      const params = new URLSearchParams({ page: String(page), pageSize: String(PAGE_SIZE) })
+      const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) })
       if (search) params.set("search", search)
-      if (difficulty !== "all") params.set("difficulty", difficulty)
-      if (instrumentId !== "all") params.set("instrumentId", instrumentId)
-      if (activeStatus !== "all") params.set("isActive", activeStatus)
-      params.set("sortBy", sortBy)
-      params.set("sortOrder", sortOrder)
+      params.set("sortBy", "name")
+      params.set("sortOrder", "asc")
 
       const response = await fetch(`${apiUrl}/api/v1/courses?${params}`, {
         credentials: "include",
@@ -283,6 +273,8 @@ export function CoursesPage() {
   const columns = useMemo<ColumnDef<Course>[]>(
     () => [
       {
+        id: "name",
+        accessorKey: "name",
         header: "Course",
         cell: ({ row }) => (
           <div>
@@ -292,10 +284,47 @@ export function CoursesPage() {
         ),
       },
       {
+        id: "instrument_name",
+        accessorKey: "instrumentName",
+        filterFn: (row, columnId, filterValues) => {
+          const selected = Array.isArray(filterValues)
+            ? (filterValues as string[])
+            : []
+          if (!selected.length) {
+            return true
+          }
+          return selected.includes(String(row.getValue(columnId)))
+        },
+        header: "Instrument",
+        cell: ({ row }) => row.original.instrumentName,
+      },
+      {
+        id: "difficulty",
+        accessorKey: "difficulty",
+        filterFn: (row, columnId, filterValues) => {
+          const selected = Array.isArray(filterValues)
+            ? (filterValues as string[])
+            : []
+          if (!selected.length) {
+            return true
+          }
+          return selected.includes(String(row.getValue(columnId)))
+        },
         header: "Difficulty",
         cell: ({ row }) => <Badge variant="outline">{row.original.difficulty}</Badge>,
       },
       {
+        id: "status",
+        accessorFn: (row) => (row.isActive ? "active" : "archived"),
+        filterFn: (row, columnId, filterValues) => {
+          const selected = Array.isArray(filterValues)
+            ? (filterValues as string[])
+            : []
+          if (!selected.length) {
+            return true
+          }
+          return selected.includes(String(row.getValue(columnId)))
+        },
         header: "Status",
         cell: ({ row }) => (
           <Badge variant={row.original.isActive ? "secondary" : "outline"}>
@@ -304,6 +333,8 @@ export function CoursesPage() {
         ),
       },
       {
+        id: "updated_at",
+        accessorKey: "updatedAt",
         header: "Updated",
         cell: ({ row }) => new Date(row.original.updatedAt).toLocaleDateString(),
       },
@@ -356,14 +387,7 @@ export function CoursesPage() {
     [archiveMutation, canManage]
   )
 
-  const table = useReactTable({
-    data: coursesQuery.data?.data ?? [],
-    columns,
-    getCoreRowModel: getCoreRowModel(),
-  })
-
   const total = coursesQuery.data?.total ?? 0
-  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
 
   const instruments = (instrumentsQuery.data?.data ?? []) as InstrumentOption[]
 
@@ -403,140 +427,64 @@ export function CoursesPage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-5">
-            <Input
-              placeholder="Search by course name"
-              value={searchInput}
-              onChange={(event) => {
-                setSearchInput(event.target.value)
-                debouncedSearch(event.target.value.trim())
-              }}
-            />
-            <Select value={instrumentId} onValueChange={setInstrumentId}>
-              <SelectTrigger>
-                <SelectValue placeholder="Instrument" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All instruments</SelectItem>
-                {instruments.map((instrument) => (
-                  <SelectItem key={instrument.id} value={instrument.id}>
-                    {instrument.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Select value={difficulty} onValueChange={setDifficulty}>
-              <SelectTrigger>
-                <SelectValue placeholder="Difficulty" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All levels</SelectItem>
-                <SelectItem value="beginner">Beginner</SelectItem>
-                <SelectItem value="intermediate">Intermediate</SelectItem>
-                <SelectItem value="advanced">Advanced</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={activeStatus} onValueChange={setActiveStatus}>
-              <SelectTrigger>
-                <SelectValue placeholder="Status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Any status</SelectItem>
-                <SelectItem value="true">Active</SelectItem>
-                <SelectItem value="false">Archived</SelectItem>
-              </SelectContent>
-            </Select>
-            <div className="grid grid-cols-2 gap-2">
-              <Select value={sortBy} onValueChange={setSortBy}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Sort by" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="name">Name</SelectItem>
-                  <SelectItem value="instrument">Instrument</SelectItem>
-                  <SelectItem value="difficulty">Difficulty</SelectItem>
-                </SelectContent>
-              </Select>
-              <Select value={sortOrder} onValueChange={setSortOrder}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Order" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="asc">Asc</SelectItem>
-                  <SelectItem value="desc">Desc</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-              </div>
+              <DataTable
+                columns={columns}
+                data={coursesQuery.data?.data ?? []}
+                searchableColumnIds={["name", "instrument_name"]}
+                searchPlaceholder="Search by course or instrument"
+                filters={[
+                  {
+                    title: "Instrument",
+                    columnId: "instrument_name",
+                    options: instruments.map((instrument) => ({
+                      label: instrument.name,
+                      value: instrument.name,
+                    })),
+                  },
+                  {
+                    title: "Difficulty",
+                    columnId: "difficulty",
+                    options: [
+                      { label: "Beginner", value: "beginner" },
+                      { label: "Intermediate", value: "intermediate" },
+                      { label: "Advanced", value: "advanced" },
+                    ],
+                  },
+                  {
+                    title: "Status",
+                    columnId: "status",
+                    options: [
+                      { label: "Active", value: "active" },
+                      { label: "Archived", value: "archived" },
+                    ],
+                  },
+                ]}
+                isLoading={coursesQuery.isLoading}
+                loadingMessage="Loading courses..."
+                emptyMessage="No courses found."
+                pagination={{
+                  page,
+                  pageSize,
+                  total,
+                  onPageChange: setPage,
+                  onPageSizeChange: (nextPageSize) => {
+                    setPageSize(nextPageSize)
+                    setPage(1)
+                  },
+                }}
+                pageSizeOptions={pageSizeOptions}
+                searchValue={searchInput}
+                onSearchChange={(value) => {
+                  setSearchInput(value)
+                  debouncedSearch(value.trim())
+                }}
+                onRowClick={(course) => {
+                  setSelectedCourseId(course.id)
+                  setDetailsOpen(true)
+                }}
+              />
 
-              <div className="rounded-md border">
-                <Table>
-                  <TableHeader>
-                    {table.getHeaderGroups().map((headerGroup) => (
-                      <TableRow key={headerGroup.id}>
-                        {headerGroup.headers.map((header) => (
-                          <TableHead key={header.id}>
-                            {header.isPlaceholder
-                              ? null
-                              : flexRender(header.column.columnDef.header, header.getContext())}
-                          </TableHead>
-                        ))}
-                      </TableRow>
-                    ))}
-                  </TableHeader>
-                  <TableBody>
-                    {table.getRowModel().rows.length ? (
-                      table.getRowModel().rows.map((row) => (
-                        <TableRow
-                          key={row.id}
-                          className="cursor-pointer"
-                          onClick={() => {
-                            setSelectedCourseId(row.original.id)
-                            setDetailsOpen(true)
-                          }}
-                        >
-                          {row.getVisibleCells().map((cell) => (
-                            <TableCell key={cell.id}>
-                              {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                            </TableCell>
-                          ))}
-                        </TableRow>
-                      ))
-                    ) : (
-                      <TableRow>
-                        <TableCell colSpan={columns.length} className="h-24 text-center text-muted-foreground">
-                          {coursesQuery.isLoading ? "Loading..." : "No courses found."}
-                        </TableCell>
-                      </TableRow>
-                    )}
-                  </TableBody>
-                </Table>
-              </div>
-
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-muted-foreground">Total {total} courses</span>
-                <div className="flex items-center gap-2">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => setPage((prev) => Math.max(1, prev - 1))}
-                    disabled={page <= 1}
-                  >
-                    Previous
-                  </Button>
-                  <span>
-                    Page {page} of {totalPages}
-                  </span>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))}
-                    disabled={page >= totalPages}
-                  >
-                    Next
-                  </Button>
-                </div>
-              </div>
+              <div className="text-sm text-muted-foreground">Total {total} courses</div>
             </CardContent>
           </Card>
         </TabsContent>

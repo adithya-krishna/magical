@@ -20,6 +20,19 @@ Notification example
 - entityId: <leadId>
 - ctaUrl: /leads?leadId=<leadId>
 
+## Flow A2: Lead walk-in teacher assignment
+Trigger
+- A lead gets `assignedTeacherId` set or changed, typically when `walkInDate` is planned.
+Recipients
+- Assigned teacher only.
+Notification example
+- type: lead_walkin_assigned
+- title: New walk-in lead assigned
+- body: John Doe is assigned to you for a walk-in on Wed.
+- entityType: lead
+- entityId: <leadId>
+- ctaUrl: /leads?leadId=<leadId>
+
 ## Flow B: Admission blocked by capacity
 Trigger
 - Admission creation fails because at least one selected slot is at capacity.

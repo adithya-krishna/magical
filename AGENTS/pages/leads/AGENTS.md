@@ -1,87 +1,93 @@
 # Leads Page AGENT
 
 ## Goal
-Capture, qualify, and manage inbound leads. The Leads page is the first core workflow and defines intake data used later by Admissions and Students.
+Capture, qualify, and progress inbound leads through phone validation, walk-in scheduling, demo tracking, and admission conversion.
 
 ## Access (RBAC)
-- Allowed roles: super_admin, admin, staff.
-- Forbidden roles: teacher, student.
-- Super_admin and admin can edit all leads.
-- Staff can edit leads they own; can view all leads.
+- Allowed roles: super_admin, admin, staff, teacher.
+- Forbidden role: student.
+- super_admin/admin: full lead access (list/details/edit/workflow/tags/history/notes).
+- staff: can view all leads, can mutate only leads they own.
+- teacher: can view only leads assigned to them (`assignedTeacherId = teacher.id`) and can add notes only.
+
+## Lifecycle workflow (required)
+1. Lead is captured from source (social, referral, walk-in, etc.).
+2. System auto-assigns a staff member (round-robin over active staff).
+3. Stage defaults to `Due for validation` (fallback `New` when missing).
+4. Staff performs manual call attempts.
+5. If lead agrees to walk in:
+   - set `walkInDate`
+   - assign `assignedTeacherId`
+   - set stage to `Walkin Expected`.
+6. If staff cannot answer queries, reassign owner to admin via assignee control.
+7. Teacher conducts demo and may add requirements in notes.
+8. Staff marks `demoConducted` and `demoDate`.
 
 ## UI scope
-- Default listing page with filters and pagination.
-- Clicking a row opens a side panel with full lead details.
-- Inline actions from list and panel: assign owner, change stage, add note.
-- Bulk upload via CSV template with validation results.
+- Leads listing page with pagination, search, status filters.
+- Lead details CRM panel with tabs:
+  - `Follow-up`: searchable notes chat, stage choice cards, assignee/teacher/date/demo workflow controls.
+  - `History`: immutable timeline of all lead changes.
+  - `Edit`: profile fields (address, guardian, phone/email, area/community, budget, etc.).
+- Right-side profile section includes avatar, create-admission CTA, profile summary, tags, and lead-specific alerts.
 
-## Data model (suggested)
+## Data model (current target)
 Lead
 - id (uuid)
-- firstName (string, required)
-- lastName (string, required)
-- phone (string, required)
-- email (string, optional)
-- interest (string, optional) // instrument or course
-- source (string, optional) // referral, ads, web, etc.
-- stageId (uuid, required)
-- ownerId (uuid, nullable)
-- notes (text, optional)
-- followUpDate (date, required)
-- followUpStatus (enum: open, done)
-- createdAt, updatedAt
+- firstName, lastName, phone, email
+- area, community, address, guardianName, age
+- expectedBudget (int)
+- interest, source
+- ownerId (staff/admin), assignedTeacherId (teacher)
+- stageId
+- followUpDate (date), followUpStatus (open|done)
+- nextFollowUp (timestamp), walkInDate (date)
+- numberOfContactAttempts (int), lastContactedDate (timestamp)
+- demoDate (date), demoConducted (boolean)
+- notes (profile notes)
+- createdAt, updatedAt, deletedAt
 
-LeadStage
-- id (uuid)
-- name (string, required, unique)
-- order (int, required) // for pipeline ordering
-- isOnboarded (boolean, default false) // marks final stage
-- isActive (boolean, default true)
+LeadNote
+- id, leadId, body, createdBy, createdAt
 
-LeadNote (optional v1, can be simplified to a single notes field)
-- id (uuid)
-- leadId (uuid)
-- body (text)
-- createdBy (uuid)
-- createdAt
+LeadTag
+- id, leadId, label, createdBy, createdAt
 
 LeadAuditEvent
-- id (uuid)
-- leadId (uuid)
-- type (enum: created, updated, stage_changed, owner_changed, note_added, bulk_imported)
-- meta (json)
-- createdBy (uuid)
-- createdAt
+- id, leadId, eventType, meta (json), createdBy, createdAt
 
-## Lead stages (dynamic)
-- Stages are configurable by super_admin/admin.
-- Use `isOnboarded=true` for the terminal stage (ex: Onboarded). This is used for filtering and future admissions triggers.
-- Enforce at least one active stage.
-- If the active stage is deleted, reassign to a fallback stage.
+## Audit and history rules (strict)
+- All write actions MUST create audit events, including:
+  - created, updated, profile_updated, workflow_updated
+  - stage_changed, owner_changed, tags_updated, note_added, deleted, bulk_imported
+- History API is the source of truth for change timeline.
+- `meta` should include before/after values where possible.
 
-## Filters and sorting
-- Search by name, phone, email.
-- Filter by stage, owner, source, created date range.
-- Filter by followUpDate range and followUpStatus.
-- Sort by createdAt (default desc), updatedAt, stage order.
-
-## Bulk upload (CSV)
-- Provide a downloadable CSV template from the UI.
-- Required columns: firstName, lastName, phone.
-- Optional columns: email, interest, source, notes, followUpDate.
-- Bulk import always assigns the default stage "New".
-- Validate row-by-row; accept partial success with a summary of errors.
-- On success, record a bulk_imported audit event per lead.
+## Alerts (lead-specific)
+- Missed follow-up: `nextFollowUp` (or `followUpDate`) is in the past.
+- Nearing walk-in: `walkInDate` is within 48 hours.
+- Data consistency warning: demo conducted but demo date missing.
 
 ## API endpoints (v1)
 Leads
-- GET `/api/v1/leads` with pagination and filters
+- GET `/api/v1/leads`
 - GET `/api/v1/leads/:id`
+- GET `/api/v1/leads/:id/details`
 - POST `/api/v1/leads`
 - PATCH `/api/v1/leads/:id`
-- DELETE `/api/v1/leads/:id` (soft delete preferred)
-- POST `/api/v1/leads/bulk` (CSV upload)
-- GET `/api/v1/leads/template` (CSV template)
+- PATCH `/api/v1/leads/:id/workflow`
+- PATCH `/api/v1/leads/:id/profile`
+- DELETE `/api/v1/leads/:id`
+
+Notes, tags, history
+- GET `/api/v1/leads/:id/notes`
+- POST `/api/v1/leads/:id/notes`
+- GET `/api/v1/leads/:id/history`
+- PUT `/api/v1/leads/:id/tags`
+
+Bulk
+- POST `/api/v1/leads/bulk`
+- GET `/api/v1/leads/template`
 
 Lead stages
 - GET `/api/v1/lead-stages`
@@ -89,27 +95,23 @@ Lead stages
 - PATCH `/api/v1/lead-stages/:id` (admin+)
 - DELETE `/api/v1/lead-stages/:id` (admin+)
 
-Users for assignment
-- GET `/api/v1/users?roles=admin,staff` (minimal fields for assignment)
+Lookup APIs
+- GET `/api/v1/users?roles=staff`
+- GET `/api/v1/users?roles=teacher`
 
 ## Validation rules
-- phone is required and normalized (E.164 stored, raw input accepted).
-- email must be valid format when provided.
-- stageId must refer to an active stage.
-- ownerId must belong to admin or staff.
-- followUpDate must be today or later.
-- Prevent deleting a stage if it is the only active stage.
+- phone required and normalized server-side.
+- followUpDate cannot be in the past.
+- stageId must point to active stage.
+- ownerId must be admin/staff.
+- assignedTeacherId must be teacher.
+- expectedBudget >= 0.
+- numberOfContactAttempts >= 0.
 
-## FE behaviors
-- Load stages and owners before rendering filters.
-- Side panel uses optimistic updates for stage/owner changes with rollback on error.
-- When stage changes to `isOnboarded`, show a non-blocking banner that admissions can be created later.
-- Follow-up status changes notify admin and super_admin.
-
-## Seed data (recommended)
-- Default stages: New, Contacted, Trial Scheduled, Trial Completed, Onboarded (isOnboarded).
+## Notification rules
+- On teacher assignment for walk-in, notify assigned teacher.
+- Follow-up status updates can notify admins/super_admins.
 
 ## Notes
-- Admissions integration will come later; keep stage and lead ownership auditable for future workflow automation.
-- Admissions may create system-generated leads for walk-in enrollments. Use a distinct source value (e.g. `walk_in`) and keep them in an onboarded stage.
-- Scheduled job should emit lead_followup_due notifications for open leads with followUpDate due or overdue.
+- Keep admissions creation separate but reachable via CTA from lead details.
+- Attachments are out of scope for current iteration.
