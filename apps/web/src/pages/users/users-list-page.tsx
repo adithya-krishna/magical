@@ -38,6 +38,7 @@ import {
   type ManagedUserRole,
 } from "@/lib/users-rbac";
 import type { UserListItem, UserListResponse } from "@/pages/users/types";
+import { UserRowActions } from "@/pages/users/user-row-actions";
 
 function getErrorMessage(error: unknown, fallback: string) {
   if (error && typeof error === "object" && "message" in error) {
@@ -228,6 +229,33 @@ export function UsersListPage({
     },
   });
 
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const response = await fetch(`${apiUrl}/api/v1/${endpointMap[role]}/${id}`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to delete user");
+      }
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["users", role] });
+      toast.success("User deleted");
+    },
+    onError: (error) => {
+      toast.error(getErrorMessage(error, "Unable to delete user."));
+    },
+  });
+
+  function getDetailUrl(id: string) {
+    if (role === "student") return `/users/students/${id}/profile`;
+    if (role === "teacher") return `/users/teachers/${id}/profile`;
+    if (role === "staff") return `/users/staff/${id}/profile`;
+    return `/users/admins/${id}/profile`;
+  }
+
   const columns: ColumnDef<UserListItem>[] = [
     {
       id: "name",
@@ -273,6 +301,28 @@ export function UsersListPage({
     {
       header: "Created",
       cell: ({ row }) => new Date(row.original.createdAt).toLocaleDateString(),
+    },
+    {
+      id: "actions",
+      header: "",
+      cell: ({ row }) => {
+        if (!canManage) {
+          return <span className="text-xs text-muted-foreground">View only</span>;
+        }
+
+        const item = row.original;
+        return (
+          <UserRowActions
+            title={`${item.firstName} ${item.lastName}`.trim()}
+            onUpdate={() => {
+              window.location.assign(getDetailUrl(item.id));
+            }}
+            onDelete={() => {
+              deleteMutation.mutate(item.id);
+            }}
+          />
+        );
+      },
     },
   ];
 

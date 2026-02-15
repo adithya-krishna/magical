@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type ColumnDef } from "@tanstack/react-table";
 import debounce from "lodash/debounce";
 import { Plus } from "lucide-react";
@@ -21,11 +21,32 @@ import {
 import { toast } from "sonner";
 import { authClient } from "@/lib/auth-client";
 import { AdmissionFormSheet } from "@/pages/admissions/admission-form-sheet";
+import { AdmissionRowActions } from "@/pages/admissions/admission-row-actions";
 import type {
   Admission,
+  AdmissionStatus,
   AdmissionsResponse,
   CoursePlansResponse,
 } from "@/pages/admissions/types";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 type AppRole = "super_admin" | "admin" | "staff" | "teacher" | "student";
 
@@ -57,8 +78,9 @@ export function AdmissionsPage() {
   const session = authClient.useSession();
   const queryClient = useQueryClient();
   const paginationConfigQuery = usePaginationConfig();
-  const pageSizeOptions =
-    paginationConfigQuery.data?.data.pageSizeOptions ?? [...DEFAULT_PAGE_SIZE_OPTIONS];
+  const pageSizeOptions = paginationConfigQuery.data?.data.pageSizeOptions ?? [
+    ...DEFAULT_PAGE_SIZE_OPTIONS,
+  ];
   const defaultPageSize =
     paginationConfigQuery.data?.data.defaultPageSize ?? DEFAULT_PAGE_SIZE;
   const role =
@@ -71,6 +93,10 @@ export function AdmissionsPage() {
   const [pageSize, setPageSize] = useState(defaultPageSize);
   const [createOpen, setCreateOpen] = useState(false);
   const [initialLeadId, setInitialLeadId] = useState<string | null>(null);
+  const [editingAdmission, setEditingAdmission] = useState<Admission | null>(
+    null,
+  );
+  const [editStatus, setEditStatus] = useState<AdmissionStatus>("pending");
 
   const debouncedSearchUpdate = useMemo(
     () =>
@@ -159,6 +185,55 @@ export function AdmissionsPage() {
     }
   }, [coursePlansQuery.isError, coursePlansQuery.error]);
 
+  const updateAdmissionMutation = useMutation({
+    mutationFn: async ({
+      id,
+      status,
+    }: {
+      id: string;
+      status: AdmissionStatus;
+    }) => {
+      const response = await fetch(`${apiUrl}/api/v1/admissions/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ status }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to update admission");
+      }
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["admissions"] });
+      toast.success("Admission updated");
+      setEditingAdmission(null);
+    },
+    onError: (error) => {
+      toast.error(getErrorMessage(error, "Unable to update admission."));
+    },
+  });
+
+  const deleteAdmissionMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const response = await fetch(`${apiUrl}/api/v1/admissions/${id}`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to delete admission");
+      }
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["admissions"] });
+      toast.success("Admission deleted");
+    },
+    onError: (error) => {
+      toast.error(getErrorMessage(error, "Unable to delete admission."));
+    },
+  });
+
   if (!canViewAdmissions) {
     return (
       <Card>
@@ -177,14 +252,6 @@ export function AdmissionsPage() {
     admission: Admission;
     lead: Admission["lead"];
   }>[] = [
-    {
-      id: "admission_id",
-      accessorFn: (row) => row.admission.id,
-      header: "Admission",
-      cell: ({ row }) => (
-        <span className="font-mono text-xs">{row.original.admission.id}</span>
-      ),
-    },
     {
       id: "lead_name",
       accessorFn: (row) =>
@@ -252,12 +319,17 @@ export function AdmissionsPage() {
       },
     },
     {
-      header: "Classes",
-      cell: ({ row }) =>
-        `${row.original.admission.baseClasses} + ${row.original.admission.extraClasses} = ${row.original.admission.finalClasses}`,
+      header: "Total Classes",
+      cell: ({ row }) => {
+        return (
+          <span className="text-muted-foreground">
+            {row.original.admission.finalClasses}
+          </span>
+        );
+      },
     },
     {
-      header: "Start",
+      header: "Start from",
       cell: ({ row }) => formatDate(row.original.admission.startDate),
     },
     {
@@ -289,30 +361,58 @@ export function AdmissionsPage() {
       header: "Created",
       cell: ({ row }) => formatDate(row.original.admission.createdAt),
     },
+    {
+      id: "actions",
+      header: "",
+      cell: ({ row }) => {
+        const item = row.original.admission;
+        const leadName = row.original.lead
+          ? `${row.original.lead.firstName} ${row.original.lead.lastName}`
+          : item.leadId;
+
+        return (
+          <AdmissionRowActions
+            title={leadName}
+            onUpdate={() => {
+              setEditingAdmission(item);
+              setEditStatus(item.status);
+            }}
+            onDelete={() => {
+              deleteAdmissionMutation.mutate(item.id);
+            }}
+          />
+        );
+      },
+    },
   ];
 
   const total = admissionsQuery.data?.total ?? 0;
 
   return (
     <div className="mx-auto w-full max-w-6xl space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold">Admissions</h1>
-        <p className="text-sm text-muted-foreground">
-          Manage admissions with plan, status, and schedule context.
-        </p>
-      </div>
-
-      {canCreateAdmissions ? (
-        <div>
-          <Button onClick={() => setCreateOpen(true)}>
-            <Plus className="mr-2 h-4 w-4" /> New Admission
-          </Button>
-        </div>
-      ) : null}
-
       <Card>
         <CardHeader>
-          <CardTitle>Admissions list</CardTitle>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <CardTitle>Admissions list</CardTitle>
+            {canCreateAdmissions && (
+              <div className="flex items-center ">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      size={"icon"}
+                      variant={"ghost"}
+                      onClick={() => setCreateOpen(true)}
+                    >
+                      <Plus className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Create Admission</p>
+                  </TooltipContent>
+                </Tooltip>
+              </div>
+            )}
+          </div>
           <CardDescription>
             Search contacts and filter by status or course details.
           </CardDescription>
@@ -368,7 +468,9 @@ export function AdmissionsPage() {
             }}
           />
 
-          <div className="text-sm text-muted-foreground">Total {total} admissions</div>
+          <div className="text-sm text-muted-foreground">
+            Total {total} admissions
+          </div>
         </CardContent>
       </Card>
 
@@ -385,6 +487,56 @@ export function AdmissionsPage() {
           }
         }}
       />
+
+      <Dialog
+        open={Boolean(editingAdmission)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setEditingAdmission(null);
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Update admission status</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Select
+              value={editStatus}
+              onValueChange={(value) => setEditStatus(value as AdmissionStatus)}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="pending">Pending</SelectItem>
+                <SelectItem value="active">Active</SelectItem>
+                <SelectItem value="completed">Completed</SelectItem>
+                <SelectItem value="cancelled">Cancelled</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditingAdmission(null)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                if (!editingAdmission) {
+                  return;
+                }
+                updateAdmissionMutation.mutate({
+                  id: editingAdmission.id,
+                  status: editStatus,
+                });
+              }}
+              disabled={updateAdmissionMutation.isPending || !editingAdmission}
+            >
+              {updateAdmissionMutation.isPending ? "Saving..." : "Save"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

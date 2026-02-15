@@ -12,6 +12,7 @@ import { usersManagementRouter } from "../users/users-management.routes";
 import { coursePlansRouter } from "../admissions/course-plan.routes";
 import { prerequisitesRouter } from "../prerequisites/prerequisites.routes";
 import { paginationRouter } from "../common/pagination";
+import { settingsConfigRouter } from "../settings/config.routes";
 
 export const apiRouter = Router();
 
@@ -21,6 +22,7 @@ apiRouter.use("/access-requests", accessRequestsRouter);
 apiRouter.use("/admissions", admissionsRouter);
 apiRouter.use("/course-plans", coursePlansRouter);
 apiRouter.use("/prerequisites", prerequisitesRouter);
+apiRouter.use("/settings/config", settingsConfigRouter);
 apiRouter.use("/", classroomRouter);
 apiRouter.use("/courses", coursesRouter);
 apiRouter.use("/instruments", instrumentsRouter);

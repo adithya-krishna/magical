@@ -84,3 +84,10 @@ export const admissionPrerequisitesSchema = z.object({
   courseId: z.string().uuid().optional(),
   leadSearch: z.string().optional()
 });
+
+export const admissionDeleteSchema = z.object({
+  hardDelete: z
+    .enum(["true", "false"])
+    .transform((value) => value === "true")
+    .optional()
+});

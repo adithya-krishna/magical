@@ -35,10 +35,29 @@ export const classroomSlotCreateSchema = z.object({
   isActive: z.boolean().optional()
 });
 
+export const classroomSlotBulkCreateSchema = z.object({
+  courseId: z.string().uuid(),
+  teacherId: z.string().uuid(),
+  capacity: z.number().int().min(1),
+  slotSelections: z.record(z.string().regex(/^[0-6]$/), z.array(z.string().uuid())).refine(
+    (value) => Object.values(value).some((items) => items.length > 0),
+    "At least one slot must be selected"
+  )
+});
+
 export const classroomSlotUpdateSchema = classroomSlotCreateSchema.partial();
 
+export const classroomSlotDeleteSchema = z.object({
+  hardDelete: z
+    .enum(["true", "false"])
+    .transform((value) => value === "true")
+    .optional()
+});
+
 export const dashboardSchema = z.object({
-  day: z.coerce.number().int().min(0).max(6).optional()
+  day: z.coerce.number().int().min(0).max(6).optional(),
+  courseId: z.string().uuid().optional(),
+  teacherId: z.string().uuid().optional()
 });
 
 export const attendanceListSchema = z.object({

@@ -6,38 +6,32 @@ import {
   attendanceUpdateSchema,
   attendanceUpsertSchema,
   classroomAssignmentSchema,
+  classroomSlotBulkCreateSchema,
   classroomSlotCreateSchema,
+  classroomSlotDeleteSchema,
   classroomSlotListSchema,
   classroomSlotUpdateSchema,
   dashboardSchema,
-  operatingDayUpdateSchema,
   rescheduleCreateSchema,
   rescheduleListSchema,
   rescheduleUpdateSchema,
-  studentFilterSchema,
-  timeSlotCreateSchema,
-  timeSlotListSchema,
-  timeSlotUpdateSchema
+  studentFilterSchema
 } from "./classroom.schemas";
 import {
   createClassroomAssignmentService,
+  createBulkClassroomSlotsService,
   createClassroomSlotService,
   createRescheduleRequestService,
-  createTimeSlotService,
   deleteClassroomSlotService,
-  deleteTimeSlotService,
+  getClassroomSlotService,
   getClassroomDashboardService,
   listAttendanceService,
   listClassroomSlotsService,
-  listOperatingDaysService,
   listRescheduleRequestsService,
   listStudentsService,
-  listTimeSlotsService,
   updateAttendanceService,
   updateClassroomSlotService,
-  updateOperatingDaysService,
   updateRescheduleRequestService,
-  updateTimeSlotService,
   upsertAttendanceService
 } from "./classroom.service";
 
@@ -50,116 +44,6 @@ function handleError(res: Response, error: unknown) {
   res.status(500).json({ error: "Internal server error" });
 }
 
-export async function listOperatingDays(req: Request, res: Response) {
-  try {
-    const data = await listOperatingDaysService();
-    res.json({ data });
-  } catch (error) {
-    handleError(res, error);
-  }
-}
-
-export async function updateOperatingDays(req: Request, res: Response) {
-  const parsed = operatingDayUpdateSchema.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.flatten() });
-    return;
-  }
-
-  if (!req.user) {
-    res.status(401).json({ error: "Unauthorized" });
-    return;
-  }
-
-  try {
-    const data = await updateOperatingDaysService(parsed.data, req.user);
-    res.json({ data });
-  } catch (error) {
-    handleError(res, error);
-  }
-}
-
-export async function listTimeSlots(req: Request, res: Response) {
-  const parsed = timeSlotListSchema.safeParse(req.query);
-  if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.flatten() });
-    return;
-  }
-
-  try {
-    const data = await listTimeSlotsService(parsed.data.day);
-    res.json({ data });
-  } catch (error) {
-    handleError(res, error);
-  }
-}
-
-export async function createTimeSlot(req: Request, res: Response) {
-  const parsed = timeSlotCreateSchema.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.flatten() });
-    return;
-  }
-
-  if (!req.user) {
-    res.status(401).json({ error: "Unauthorized" });
-    return;
-  }
-
-  try {
-    const data = await createTimeSlotService(parsed.data, req.user);
-    res.status(201).json({ data });
-  } catch (error) {
-    handleError(res, error);
-  }
-}
-
-export async function updateTimeSlot(req: Request, res: Response) {
-  const params = z.object({ id: z.string().uuid() }).safeParse(req.params);
-  if (!params.success) {
-    res.status(400).json({ error: params.error.flatten() });
-    return;
-  }
-
-  const parsed = timeSlotUpdateSchema.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.flatten() });
-    return;
-  }
-
-  if (!req.user) {
-    res.status(401).json({ error: "Unauthorized" });
-    return;
-  }
-
-  try {
-    const data = await updateTimeSlotService(params.data.id, parsed.data, req.user);
-    res.json({ data });
-  } catch (error) {
-    handleError(res, error);
-  }
-}
-
-export async function deleteTimeSlot(req: Request, res: Response) {
-  const params = z.object({ id: z.string().uuid() }).safeParse(req.params);
-  if (!params.success) {
-    res.status(400).json({ error: params.error.flatten() });
-    return;
-  }
-
-  if (!req.user) {
-    res.status(401).json({ error: "Unauthorized" });
-    return;
-  }
-
-  try {
-    await deleteTimeSlotService(params.data.id, req.user);
-    res.status(204).send();
-  } catch (error) {
-    handleError(res, error);
-  }
-}
-
 export async function listClassroomSlots(req: Request, res: Response) {
   const parsed = classroomSlotListSchema.safeParse(req.query);
   if (!parsed.success) {
@@ -169,6 +53,21 @@ export async function listClassroomSlots(req: Request, res: Response) {
 
   try {
     const data = await listClassroomSlotsService(parsed.data);
+    res.json({ data });
+  } catch (error) {
+    handleError(res, error);
+  }
+}
+
+export async function getClassroomSlot(req: Request, res: Response) {
+  const params = z.object({ id: z.string().uuid() }).safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: params.error.flatten() });
+    return;
+  }
+
+  try {
+    const data = await getClassroomSlotService(params.data.id);
     res.json({ data });
   } catch (error) {
     handleError(res, error);
@@ -189,6 +88,26 @@ export async function createClassroomSlot(req: Request, res: Response) {
 
   try {
     const data = await createClassroomSlotService(parsed.data, req.user);
+    res.status(201).json({ data });
+  } catch (error) {
+    handleError(res, error);
+  }
+}
+
+export async function createBulkClassroomSlots(req: Request, res: Response) {
+  const parsed = classroomSlotBulkCreateSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.flatten() });
+    return;
+  }
+
+  if (!req.user) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+
+  try {
+    const data = await createBulkClassroomSlotsService(parsed.data, req.user);
     res.status(201).json({ data });
   } catch (error) {
     handleError(res, error);
@@ -233,8 +152,14 @@ export async function deleteClassroomSlot(req: Request, res: Response) {
     return;
   }
 
+  const query = classroomSlotDeleteSchema.safeParse(req.query);
+  if (!query.success) {
+    res.status(400).json({ error: query.error.flatten() });
+    return;
+  }
+
   try {
-    await deleteClassroomSlotService(params.data.id, req.user);
+    await deleteClassroomSlotService(params.data.id, req.user, query.data?.hardDelete === true);
     res.status(204).send();
   } catch (error) {
     handleError(res, error);
@@ -249,7 +174,11 @@ export async function getClassroomDashboard(req: Request, res: Response) {
   }
 
   try {
-    const data = await getClassroomDashboardService(parsed.data.day);
+    const data = await getClassroomDashboardService(
+      parsed.data.day,
+      parsed.data.courseId,
+      parsed.data.teacherId
+    );
     res.json({ data });
   } catch (error) {
     handleError(res, error);

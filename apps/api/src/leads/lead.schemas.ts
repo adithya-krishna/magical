@@ -85,6 +85,13 @@ export const leadTagsSchema = z.object({
   tags: z.array(z.string().trim().min(1)).max(20)
 });
 
+export const leadDeleteSchema = z.object({
+  hardDelete: z
+    .enum(["true", "false"])
+    .transform((value) => value === "true")
+    .optional()
+});
+
 export const leadStageSchema = z.object({
   name: z.string().min(1),
   color: z.enum(LEAD_STAGE_COLORS),

@@ -137,6 +137,14 @@ export async function deactivateClassroomSlot(id: string) {
   return result[0] ?? null;
 }
 
+export async function hardDeleteClassroomSlot(id: string) {
+  const result = await db
+    .delete(classroomSlots)
+    .where(eq(classroomSlots.id, id))
+    .returning();
+  return result[0] ?? null;
+}
+
 export async function countActiveEnrollments(classroomSlotIds: string[]) {
   if (classroomSlotIds.length === 0) {
     return [];

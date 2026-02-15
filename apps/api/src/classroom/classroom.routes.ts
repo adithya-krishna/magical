@@ -2,23 +2,19 @@ import { Router } from "express";
 import { requireAuth, requireRole } from "../middleware/auth";
 import {
   createClassroomAssignment,
+  createBulkClassroomSlots,
   createClassroomSlot,
   createRescheduleRequest,
-  createTimeSlot,
   deleteClassroomSlot,
-  deleteTimeSlot,
+  getClassroomSlot,
   getClassroomDashboard,
   listAttendance,
   listClassroomSlots,
-  listOperatingDays,
   listRescheduleRequests,
   listStudents,
-  listTimeSlots,
   updateAttendance,
   updateClassroomSlot,
-  updateOperatingDays,
   updateRescheduleRequest,
-  updateTimeSlot,
   upsertAttendance
 } from "./classroom.controller";
 
@@ -27,46 +23,24 @@ export const classroomRouter = Router();
 classroomRouter.use(requireAuth);
 
 classroomRouter.get(
-  "/operating-days",
-  requireRole(["super_admin", "admin", "staff"]),
-  listOperatingDays
-);
-classroomRouter.patch(
-  "/operating-days",
-  requireRole(["super_admin", "admin"]),
-  updateOperatingDays
-);
-
-classroomRouter.get(
-  "/time-slots",
-  requireRole(["super_admin", "admin", "staff"]),
-  listTimeSlots
-);
-classroomRouter.post(
-  "/time-slots",
-  requireRole(["super_admin", "admin"]),
-  createTimeSlot
-);
-classroomRouter.patch(
-  "/time-slots/:id",
-  requireRole(["super_admin", "admin"]),
-  updateTimeSlot
-);
-classroomRouter.delete(
-  "/time-slots/:id",
-  requireRole(["super_admin", "admin"]),
-  deleteTimeSlot
-);
-
-classroomRouter.get(
   "/classroom-slots",
   requireRole(["super_admin", "admin", "staff"]),
   listClassroomSlots
+);
+classroomRouter.get(
+  "/classroom-slots/:id",
+  requireRole(["super_admin", "admin", "staff"]),
+  getClassroomSlot
 );
 classroomRouter.post(
   "/classroom-slots",
   requireRole(["super_admin", "admin"]),
   createClassroomSlot
+);
+classroomRouter.post(
+  "/classroom-slots/bulk",
+  requireRole(["super_admin", "admin"]),
+  createBulkClassroomSlots
 );
 classroomRouter.patch(
   "/classroom-slots/:id",

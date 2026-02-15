@@ -36,6 +36,13 @@ export const userCreateSchema = z.object({
   isActive: z.boolean().optional()
 });
 
+export const userDeleteSchema = z.object({
+  hardDelete: z
+    .enum(["true", "false"])
+    .transform((value) => value === "true")
+    .optional()
+});
+
 export const userAttendanceSchema = z.object({
   workDate: z.string(),
   status: z.enum(["present", "absent", "late", "excused"]),

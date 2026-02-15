@@ -6,6 +6,7 @@ import {
   leadListSchema,
   leadNoteCreateSchema,
   leadProfileSchema,
+  leadDeleteSchema,
   leadTagsSchema,
   leadUpdateSchema,
   leadWorkflowSchema
@@ -20,7 +21,7 @@ import {
   listLeadNotesService,
   listLeadsService,
   replaceLeadTagsService,
-  softDeleteLeadService,
+  deleteLeadService,
   updateLeadProfileService,
   updateLeadService,
   updateLeadWorkflowService
@@ -154,8 +155,14 @@ export async function deleteLead(req: Request, res: Response) {
     return;
   }
 
+  const query = leadDeleteSchema.safeParse(req.query);
+  if (!query.success) {
+    res.status(400).json({ error: query.error.flatten() });
+    return;
+  }
+
   try {
-    await softDeleteLeadService(params.data.id, req.user);
+    await deleteLeadService(params.data.id, req.user, query.data?.hardDelete === true);
     res.status(204).send();
   } catch (error) {
     handleError(res, error);

@@ -5,11 +5,13 @@ import {
   studentProgressSchema,
   userAttendanceSchema,
   userCreateSchema,
+  userDeleteSchema,
   userListSchema,
   userProfilePatchSchema
 } from "./users-management.schemas";
 import {
   createUserByRoleService,
+  deleteUserByRoleService,
   createStudentProgressService,
   createUserAttendanceService,
   deleteStudentProgressService,
@@ -163,6 +165,28 @@ export function makePatchUserHandler(role: ManagedRole) {
     try {
       const data = await patchUserProfileService(role, parsed.id, body.data, parsed.requester);
       res.json({ data });
+    } catch (error) {
+      handleError(res, error);
+    }
+  };
+}
+
+export function makeDeleteUserHandler(role: ManagedRole) {
+  return async (req: Request, res: Response) => {
+    const parsed = parseIdParams(req, res);
+    if (!parsed) {
+      return;
+    }
+
+    const query = userDeleteSchema.safeParse(req.query);
+    if (!query.success) {
+      res.status(400).json({ error: query.error.flatten() });
+      return;
+    }
+
+    try {
+      await deleteUserByRoleService(role, parsed.id, parsed.requester, query.data?.hardDelete === true);
+      res.status(204).send();
     } catch (error) {
       handleError(res, error);
     }

@@ -1,13 +1,13 @@
 import { AppError } from "../common/errors";
+import { format as formatDate, isValid, parse } from "date-fns";
 import type { AuthUser } from "../middleware/auth";
 import {
   countActiveEnrollments,
   createClassroomSlot,
   createEnrollment,
   createRescheduleRequest,
-  createTimeSlot,
   deactivateClassroomSlot,
-  deactivateTimeSlot,
+  hardDeleteClassroomSlot,
   existsCourseTeacherAssignment,
   existsClassroomSlotForCourseTeacher,
   getAdmissionForStudentCourse,
@@ -24,33 +24,27 @@ import {
   insertAttendanceRows,
   listAttendanceBySlot,
   listClassroomSlots,
-  listOperatingDays,
   listRescheduleRequests,
   listStudentsByCourse,
-  listTimeSlots,
   updateAttendanceById,
   updateClassroomSlot,
-  updateOperatingDays,
-  updateRescheduleRequest,
-  updateTimeSlot
+  updateRescheduleRequest
 } from "./classroom.repo";
 import type {
   AttendanceUpdateInput,
   AttendanceUpsertInput,
   ClassroomAssignmentInput,
+  ClassroomSlotBulkCreateInput,
   ClassroomSlotCreateInput,
   ClassroomSlotFilters,
   ClassroomSlotUpdateInput,
-  OperatingDayUpdate,
   RescheduleRequestCreateInput,
   RescheduleRequestUpdateInput,
-  TimeSlotCreateInput,
-  TimeSlotUpdateInput
 } from "./classroom.types";
 
 function parseDateOnly(value: string, fieldLabel: string) {
-  const date = new Date(`${value}T00:00:00Z`);
-  if (Number.isNaN(date.getTime())) {
+  const date = parse(value, "yyyy-MM-dd", new Date());
+  if (!isValid(date) || formatDate(date, "yyyy-MM-dd") !== value) {
     throw new AppError(400, `Invalid ${fieldLabel}`);
   }
   return date;
@@ -60,70 +54,6 @@ function ensureAdminAccess(user: AuthUser) {
   if (user.role === "staff") {
     throw new AppError(403, "Staff has view-only access to classroom management");
   }
-}
-
-export async function listOperatingDaysService() {
-  return listOperatingDays();
-}
-
-export async function updateOperatingDaysService(updates: OperatingDayUpdate[], user: AuthUser) {
-  ensureAdminAccess(user);
-  return updateOperatingDays(updates);
-}
-
-export async function listTimeSlotsService(day?: number) {
-  return listTimeSlots(day);
-}
-
-export async function createTimeSlotService(input: TimeSlotCreateInput, user: AuthUser) {
-  ensureAdminAccess(user);
-
-  if (input.startTime >= input.endTime) {
-    throw new AppError(400, "startTime must be earlier than endTime");
-  }
-
-  return createTimeSlot({
-    dayOfWeek: input.dayOfWeek,
-    startTime: input.startTime,
-    endTime: input.endTime,
-    durationMinutes: input.durationMinutes,
-    isActive: input.isActive ?? true
-  });
-}
-
-export async function updateTimeSlotService(id: string, patch: TimeSlotUpdateInput, user: AuthUser) {
-  ensureAdminAccess(user);
-
-  const existing = await getTimeSlotById(id);
-  if (!existing) {
-    throw new AppError(404, "Time slot not found");
-  }
-
-  const startTime = patch.startTime ?? existing.startTime;
-  const endTime = patch.endTime ?? existing.endTime;
-  if (startTime >= endTime) {
-    throw new AppError(400, "startTime must be earlier than endTime");
-  }
-
-  const updated = await updateTimeSlot(id, {
-    ...patch,
-    startTime,
-    endTime
-  });
-
-  if (!updated) {
-    throw new AppError(404, "Time slot not found");
-  }
-  return updated;
-}
-
-export async function deleteTimeSlotService(id: string, user: AuthUser) {
-  ensureAdminAccess(user);
-  const deleted = await deactivateTimeSlot(id);
-  if (!deleted) {
-    throw new AppError(404, "Time slot not found");
-  }
-  return deleted;
 }
 
 export async function listClassroomSlotsService(filters: ClassroomSlotFilters) {
@@ -139,6 +69,24 @@ export async function listClassroomSlotsService(filters: ClassroomSlotFilters) {
     teacher: row.teacher,
     occupancy: countMap.get(row.slot.id) ?? 0
   }));
+}
+
+export async function getClassroomSlotService(id: string) {
+  const row = await getClassroomSlotWithCourseTeacher(id);
+  if (!row) {
+    throw new AppError(404, "Classroom slot not found");
+  }
+
+  const counts = await countActiveEnrollments([id]);
+  const occupancy = counts[0]?.count ?? 0;
+
+  return {
+    ...row.slot,
+    timeSlot: row.timeSlot,
+    course: row.course,
+    teacher: row.teacher,
+    occupancy
+  };
 }
 
 export async function createClassroomSlotService(
@@ -181,6 +129,87 @@ export async function createClassroomSlotService(
   });
 }
 
+export async function createBulkClassroomSlotsService(
+  input: ClassroomSlotBulkCreateInput,
+  user: AuthUser
+) {
+  ensureAdminAccess(user);
+
+  const course = await getCourseById(input.courseId);
+  if (!course) {
+    throw new AppError(400, "Course not found");
+  }
+
+  const teacher = await getUserById(input.teacherId);
+  if (!teacher || teacher.role !== "teacher") {
+    throw new AppError(400, "Teacher not found");
+  }
+
+  const isAssignedToCourse = await existsCourseTeacherAssignment(input.courseId, input.teacherId);
+  if (!isAssignedToCourse) {
+    throw new AppError(400, "Teacher must be assigned to this course");
+  }
+
+  const selectedPairs = Object.entries(input.slotSelections).flatMap(([day, slotIds]) =>
+    slotIds.map((slotId) => ({ dayOfWeek: Number(day), slotId }))
+  );
+
+  const selectedTimeSlotIds = Array.from(new Set(selectedPairs.map((item) => item.slotId).filter(Boolean)));
+
+  if (selectedTimeSlotIds.length === 0) {
+    throw new AppError(400, "At least one slot must be selected");
+  }
+
+  const results: Array<{ id: string; mode: "created" | "updated" }> = [];
+
+  for (const timeSlotId of selectedTimeSlotIds) {
+    const timeSlot = await getTimeSlotById(timeSlotId);
+    if (!timeSlot || !timeSlot.isActive) {
+      throw new AppError(400, `Time slot ${timeSlotId} is missing or inactive`);
+    }
+
+    const selectedDays = new Set(
+      selectedPairs.filter((item) => item.slotId === timeSlotId).map((item) => item.dayOfWeek)
+    );
+    if (selectedDays.size > 0 && !selectedDays.has(timeSlot.dayOfWeek)) {
+      throw new AppError(400, `Time slot ${timeSlotId} does not match selected day`);
+    }
+
+    const existing = await getClassroomSlotByTimeSlotAndCourse(timeSlotId, input.courseId);
+    if (existing) {
+      const updated = await updateClassroomSlot(existing.id, {
+        teacherId: input.teacherId,
+        capacity: input.capacity,
+        isActive: true
+      });
+
+      if (!updated) {
+        throw new AppError(404, "Classroom slot not found");
+      }
+
+      results.push({ id: updated.id, mode: "updated" });
+      continue;
+    }
+
+    const created = await createClassroomSlot({
+      timeSlotId,
+      courseId: input.courseId,
+      teacherId: input.teacherId,
+      capacity: input.capacity,
+      isActive: true
+    });
+
+    results.push({ id: created.id, mode: "created" });
+  }
+
+  return {
+    created: results.filter((item) => item.mode === "created").length,
+    updated: results.filter((item) => item.mode === "updated").length,
+    total: results.length,
+    data: results
+  };
+}
+
 export async function updateClassroomSlotService(
   id: string,
   patch: ClassroomSlotUpdateInput,
@@ -216,9 +245,15 @@ export async function updateClassroomSlotService(
 
   const nextCourseId = patch.courseId ?? existing.courseId;
   const nextTeacherId = patch.teacherId ?? existing.teacherId;
-  const isAssignedToCourse = await existsCourseTeacherAssignment(nextCourseId, nextTeacherId);
-  if (!isAssignedToCourse) {
-    throw new AppError(400, "Teacher must be assigned to this course");
+  const teacherOrCourseChanged =
+    (patch.courseId !== undefined && patch.courseId !== existing.courseId) ||
+    (patch.teacherId !== undefined && patch.teacherId !== existing.teacherId);
+
+  if (teacherOrCourseChanged) {
+    const isAssignedToCourse = await existsCourseTeacherAssignment(nextCourseId, nextTeacherId);
+    if (!isAssignedToCourse) {
+      throw new AppError(400, "Teacher must be assigned to this course");
+    }
   }
 
   const updated = await updateClassroomSlot(id, patch);
@@ -228,8 +263,21 @@ export async function updateClassroomSlotService(
   return updated;
 }
 
-export async function deleteClassroomSlotService(id: string, user: AuthUser) {
+export async function deleteClassroomSlotService(id: string, user: AuthUser, hardDelete = false) {
   ensureAdminAccess(user);
+
+  if (hardDelete) {
+    try {
+      const deleted = await hardDeleteClassroomSlot(id);
+      if (!deleted) {
+        throw new AppError(404, "Classroom slot not found");
+      }
+      return deleted;
+    } catch {
+      throw new AppError(409, "Classroom slot cannot be hard deleted due to linked records");
+    }
+  }
+
   const deleted = await deactivateClassroomSlot(id);
   if (!deleted) {
     throw new AppError(404, "Classroom slot not found");
@@ -237,8 +285,8 @@ export async function deleteClassroomSlotService(id: string, user: AuthUser) {
   return deleted;
 }
 
-export async function getClassroomDashboardService(day?: number) {
-  const rows = await listClassroomSlots({ day });
+export async function getClassroomDashboardService(day?: number, courseId?: string, teacherId?: string) {
+  const rows = await listClassroomSlots({ day, courseId, teacherId });
   const slotIds = rows.map((row) => row.slot.id);
   const counts = await countActiveEnrollments(slotIds);
   const countMap = new Map(counts.map((row) => [row.classroomSlotId, row.count]));

@@ -1,4 +1,5 @@
 import { AppError } from "../common/errors";
+import { addDays, format as formatDate, getDay, isValid, parse } from "date-fns";
 import { auth } from "../auth";
 import type { AuthUser } from "../middleware/auth";
 import { upsertUserProfile } from "../users/users-management.repo";
@@ -14,6 +15,7 @@ import {
   getOnboardedLeadStage,
   getOperatingDaysByWeekdays,
   getTimeSlotTemplates,
+  hardDeleteAdmission,
   listAdmissionPrerequisites,
   getUserById,
   getUserByEmail,
@@ -32,15 +34,15 @@ import type {
 } from "./admission.types";
 
 function parseDateOnly(value: string, fieldLabel: string) {
-  const date = new Date(`${value}T00:00:00Z`);
-  if (Number.isNaN(date.getTime())) {
+  const date = parse(value, "yyyy-MM-dd", new Date());
+  if (!isValid(date) || formatDate(date, "yyyy-MM-dd") !== value) {
     throw new AppError(400, `Invalid ${fieldLabel}`);
   }
   return date;
 }
 
 function formatDateOnly(date: Date) {
-  return date.toISOString().slice(0, 10);
+  return formatDate(date, "yyyy-MM-dd");
 }
 
 function normalizeDiscount(
@@ -250,7 +252,7 @@ function generateAttendanceDates(
   let current = new Date(start.getTime());
 
   for (let dayCount = 0; dayCount <= maxDays && results.length < totalClasses; dayCount += 1) {
-    const dayOfWeek = current.getUTCDay();
+    const dayOfWeek = getDay(current);
     const daySlots = slotsByDay.get(dayOfWeek) ?? [];
     for (const slot of daySlots) {
       if (results.length >= totalClasses) {
@@ -258,7 +260,7 @@ function generateAttendanceDates(
       }
       results.push({ classroomSlotId: slot.classroomSlotId, classDate: formatDateOnly(current) });
     }
-    current.setUTCDate(current.getUTCDate() + 1);
+    current = addDays(current, 1);
   }
 
   if (results.length < totalClasses) {
@@ -538,4 +540,27 @@ export async function deleteAdmissionService(id: string, user: AuthUser) {
     throw new AppError(404, "Admission not found");
   }
   return deleted;
+}
+
+export async function deleteAdmissionWithModeService(id: string, user: AuthUser, hardDelete = false) {
+  if (!hardDelete) {
+    return deleteAdmissionService(id, user);
+  }
+
+  const existing = await getAdmissionById(id);
+  if (!existing) {
+    throw new AppError(404, "Admission not found");
+  }
+
+  ensureStaffOwnership(user, existing.createdBy);
+
+  try {
+    const deleted = await hardDeleteAdmission(id);
+    if (!deleted) {
+      throw new AppError(404, "Admission not found");
+    }
+    return deleted;
+  } catch {
+    throw new AppError(409, "Admission cannot be hard deleted due to linked records");
+  }
 }

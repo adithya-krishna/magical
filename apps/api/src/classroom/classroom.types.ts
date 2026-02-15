@@ -27,6 +27,13 @@ export type ClassroomSlotCreateInput = {
   isActive?: boolean;
 };
 
+export type ClassroomSlotBulkCreateInput = {
+  courseId: string;
+  teacherId: string;
+  capacity: number;
+  slotSelections: Record<string, string[]>;
+};
+
 export type ClassroomSlotUpdateInput = Partial<ClassroomSlotCreateInput>;
 
 export type ClassroomSlotFilters = {

@@ -6,6 +6,7 @@ import { parseLeadCsv } from "./lead.bulk";
 import { getActiveLeadStageByName, getNewLeadStage } from "./lead-stage.repo";
 import {
   createLead,
+  hardDeleteLead,
   getLeadAlertSummary,
   getLeadById,
   insertLeadAuditEvent,
@@ -370,6 +371,38 @@ export async function softDeleteLeadService(id: string, user: AuthUser) {
   });
 
   return deleted;
+}
+
+export async function deleteLeadService(id: string, user: AuthUser, hardDelete = false) {
+  const existing = await getLeadById(id);
+  if (!existing) {
+    throw new AppError(404, "Lead not found");
+  }
+
+  ensureTeacherWriteOnlyNotes(user);
+  ensureStaffOwnership(user, existing.ownerId);
+
+  if (!hardDelete) {
+    return softDeleteLeadService(id, user);
+  }
+
+  try {
+    const deleted = await hardDeleteLead(id);
+    if (!deleted) {
+      throw new AppError(404, "Lead not found");
+    }
+
+    await insertLeadAuditEvent({
+      leadId: id,
+      eventType: "deleted",
+      meta: { hardDelete: true },
+      createdBy: user.id
+    });
+
+    return deleted;
+  } catch {
+    throw new AppError(409, "Lead cannot be hard deleted due to linked records");
+  }
 }
 
 export async function addLeadNoteService(leadId: string, body: string, user: AuthUser) {

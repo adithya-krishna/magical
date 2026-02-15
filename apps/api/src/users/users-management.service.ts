@@ -8,8 +8,10 @@ import {
   createUserAttendance,
   deleteStudentProgress,
   deleteUserAttendance,
+  hardDeleteUserByRole,
   getCredentialAccountByUserId,
   getUserByRole,
+  softDeleteUserByRole,
   listStudentProgress,
   listStudentRescheduleRequests,
   listUserAttendance,
@@ -145,6 +147,38 @@ export async function patchUserProfileService(
   }
 
   return upsertUserProfile(role, id, patch);
+}
+
+export async function deleteUserByRoleService(
+  role: ManagedRole,
+  id: string,
+  requester: AuthUser,
+  hardDelete = false
+) {
+  ensureMutateAccess(requester, role);
+
+  const existing = await getUserByRole(role, id, hardDelete);
+  if (!existing) {
+    throw new AppError(404, "User not found");
+  }
+
+  if (!hardDelete) {
+    const deleted = await softDeleteUserByRole(role, id);
+    if (!deleted) {
+      throw new AppError(404, "User not found");
+    }
+    return deleted;
+  }
+
+  try {
+    const deleted = await hardDeleteUserByRole(role, id);
+    if (!deleted) {
+      throw new AppError(404, "User not found");
+    }
+    return deleted;
+  } catch {
+    throw new AppError(409, "User cannot be hard deleted due to linked records");
+  }
 }
 
 export async function listUserAttendanceService(

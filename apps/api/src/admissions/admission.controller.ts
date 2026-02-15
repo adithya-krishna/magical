@@ -4,12 +4,13 @@ import { isAppError } from "../common/errors";
 import {
   admissionPrerequisitesSchema,
   admissionCreateSchema,
+  admissionDeleteSchema,
   admissionListSchema,
   admissionUpdateSchema
 } from "./admission.schemas";
 import {
   createAdmissionService,
-  deleteAdmissionService,
+  deleteAdmissionWithModeService,
   getAdmissionService,
   listAdmissionPrerequisitesService,
   listAdmissionsService,
@@ -148,8 +149,14 @@ export async function deleteAdmission(req: Request, res: Response) {
     return;
   }
 
+  const query = admissionDeleteSchema.safeParse(req.query);
+  if (!query.success) {
+    res.status(400).json({ error: query.error.flatten() });
+    return;
+  }
+
   try {
-    await deleteAdmissionService(params.data.id, req.user);
+    await deleteAdmissionWithModeService(params.data.id, req.user, query.data?.hardDelete === true);
     res.status(204).send();
   } catch (error) {
     handleError(res, error);

@@ -38,6 +38,7 @@ interface DataTableProps<TData, TValue> {
     options: { label: string; value: string }[];
   }>;
   initialColumnVisibility?: VisibilityState;
+  initialColumnFilters?: ColumnFiltersState;
   onRowClick?: (row: TData) => void;
   isLoading?: boolean;
   emptyMessage?: string;
@@ -82,6 +83,7 @@ export function DataTable<TData, TValue>({
   searchPlaceholder,
   filters,
   initialColumnVisibility,
+  initialColumnFilters,
   onRowClick,
   isLoading,
   emptyMessage = "No results.",
@@ -92,7 +94,9 @@ export function DataTable<TData, TValue>({
   pageSizeOptions,
 }: DataTableProps<TData, TValue>) {
   const [sorting, setSorting] = useState<SortingState>([]);
-  const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
+  const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>(
+    initialColumnFilters ?? [],
+  );
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>(
     initialColumnVisibility ?? {},
   );

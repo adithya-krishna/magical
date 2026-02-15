@@ -250,6 +250,15 @@ export async function softDeleteLead(id: string) {
   return result[0] ?? null;
 }
 
+export async function hardDeleteLead(id: string) {
+  const result = await db
+    .delete(leads)
+    .where(eq(leads.id, id))
+    .returning();
+
+  return result[0] ?? null;
+}
+
 export async function insertLeadNotes(leadId: string, body: string, createdBy: string) {
   const result = await db.insert(leadNotes).values({ leadId, body, createdBy }).returning();
   return result[0];

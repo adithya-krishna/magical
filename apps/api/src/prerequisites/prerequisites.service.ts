@@ -1,4 +1,5 @@
 import { AppError } from "../common/errors";
+import { addMinutes, differenceInMinutes, format, isValid, parse } from "date-fns";
 import {
   deactivateTimeSlotsForDay,
   listDayTimeWindow,
@@ -8,25 +9,21 @@ import {
 } from "./prerequisites.repo";
 
 function toMinutes(timeValue: string) {
-  const [hour, minute] = timeValue.split(":").map(Number);
-  if (!Number.isInteger(hour) || !Number.isInteger(minute)) {
+  const parsed = parse(timeValue, "HH:mm", new Date());
+  if (!isValid(parsed) || format(parsed, "HH:mm") !== timeValue) {
     throw new AppError(400, "Invalid time format");
   }
-  return hour * 60 + minute;
+  return parsed;
 }
 
-function toDatabaseTime(totalMinutes: number) {
-  const hours = Math.floor(totalMinutes / 60)
-    .toString()
-    .padStart(2, "0");
-  const minutes = (totalMinutes % 60).toString().padStart(2, "0");
-  return `${hours}:${minutes}:00`;
+function toDatabaseTime(value: Date) {
+  return `${format(value, "HH:mm")}:00`;
 }
 
 function generateHourlyTimeRanges(startTime: string, endTime: string) {
   const start = toMinutes(startTime);
   const end = toMinutes(endTime);
-  const duration = end - start;
+  const duration = differenceInMinutes(end, start);
 
   if (duration < 60) {
     throw new AppError(400, "Daily time window must be at least 60 minutes");
@@ -37,10 +34,11 @@ function generateHourlyTimeRanges(startTime: string, endTime: string) {
   }
 
   const ranges: Array<{ startTime: string; endTime: string; durationMinutes: number }> = [];
-  for (let current = start; current < end; current += 60) {
+  for (let current = start; differenceInMinutes(end, current) > 0; current = addMinutes(current, 60)) {
+    const next = addMinutes(current, 60);
     ranges.push({
       startTime: toDatabaseTime(current),
-      endTime: toDatabaseTime(current + 60),
+      endTime: toDatabaseTime(next),
       durationMinutes: 60
     });
   }
@@ -86,7 +84,7 @@ export async function updatePrerequisitesService(
         throw new AppError(400, `startTime and endTime required for day ${day.dayOfWeek}`);
       }
 
-      if (toMinutes(day.endTime) <= toMinutes(day.startTime)) {
+      if (differenceInMinutes(toMinutes(day.endTime), toMinutes(day.startTime)) <= 0) {
         throw new AppError(400, `endTime must be after startTime for day ${day.dayOfWeek}`);
       }
     }

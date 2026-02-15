@@ -417,3 +417,12 @@ export async function softDeleteAdmission(id: string) {
     .returning();
   return result[0] ?? null;
 }
+
+export async function hardDeleteAdmission(id: string) {
+  const result = await db
+    .delete(admissions)
+    .where(eq(admissions.id, id))
+    .returning();
+
+  return result[0] ?? null;
+}

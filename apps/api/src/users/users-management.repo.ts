@@ -5,6 +5,7 @@ import {
   desc,
   eq,
   ilike,
+  isNull,
   or,
   sql,
   type SQL
@@ -37,6 +38,7 @@ export async function listUsersByRole(
   pageSize = DEFAULT_PAGE_SIZE
 ) {
   const whereClauses = [eq(users.role, role)] as SQL[];
+  whereClauses.push(isNull(users.deletedAt));
 
   if (typeof filters.isActive === "boolean") {
     whereClauses.push(eq(users.isActive, filters.isActive));
@@ -86,7 +88,12 @@ export async function listUsersByRole(
   return { data, total: totalRows[0]?.total ?? 0 };
 }
 
-export async function getUserByRole(role: ManagedRole, id: string) {
+export async function getUserByRole(role: ManagedRole, id: string, includeDeleted = false) {
+  const whereClauses = [eq(users.id, id), eq(users.role, role)] as SQL[];
+  if (!includeDeleted) {
+    whereClauses.push(isNull(users.deletedAt));
+  }
+
   const result = await db
     .select({
       id: users.id,
@@ -102,7 +109,7 @@ export async function getUserByRole(role: ManagedRole, id: string) {
     })
     .from(users)
     .leftJoin(userProfiles, eq(userProfiles.userId, users.id))
-    .where(and(eq(users.id, id), eq(users.role, role)))
+    .where(and(...whereClauses))
     .limit(1);
 
   return result[0] ?? null;
@@ -139,6 +146,29 @@ export async function upsertUserProfile(role: ManagedRole, userId: string, patch
     .returning();
 
   return created[0];
+}
+
+export async function softDeleteUserByRole(role: ManagedRole, userId: string) {
+  const result = await db
+    .update(users)
+    .set({
+      deletedAt: sql`now()`,
+      isActive: false,
+      updatedAt: sql`now()`
+    })
+    .where(and(eq(users.id, userId), eq(users.role, role), isNull(users.deletedAt)))
+    .returning();
+
+  return result[0] ?? null;
+}
+
+export async function hardDeleteUserByRole(role: ManagedRole, userId: string) {
+  const result = await db
+    .delete(users)
+    .where(and(eq(users.id, userId), eq(users.role, role)))
+    .returning();
+
+  return result[0] ?? null;
 }
 
 export async function listUserAttendance(userId: string) {

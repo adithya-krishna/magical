@@ -1,214 +1,124 @@
 import { useEffect, useMemo, useState } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { type ColumnDef } from "@tanstack/react-table"
+import { useNavigate, useSearch } from "@tanstack/react-router"
+import { format, parse } from "date-fns"
 import { toast } from "sonner"
-import { Badge } from "@/components/ui/badge"
+import { DataTable } from "@/components/data-tables/data-table"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { DataTable } from "@/components/data-tables/data-table"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet"
-import { Switch } from "@/components/ui/switch"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { createClassroomSlotColumns, createRescheduleColumns } from "@/pages/classroom/columns"
+import { ClassroomBulkAllocationSheet } from "@/pages/classroom/components/classroom-bulk-allocation-sheet"
+import { ClassCard } from "@/pages/classroom/components/class-card"
+import { DashboardFilters } from "@/pages/classroom/components/dashboard-filters"
+import { ClassroomSingleAllocationSheet } from "@/pages/classroom/components/classroom-single-allocation-sheet"
+import { WeekPicker } from "@/pages/classroom/components/week-picker"
+import type {
+  AppRole,
+  ClassroomSlot,
+  CourseOption,
+  DashboardGroup,
+  DashboardSlot,
+  RescheduleRow,
+  SettingsConfigResponse,
+  TeacherOption,
+  TimeSlot,
+} from "@/pages/classroom/types"
+import {
+  canManageClassroom,
+  dayLabels,
+  formatPersonName,
+  formatTimeLabel,
+  getErrorMessage,
+  isClassroomAllowed,
+} from "@/pages/classroom/utils"
 import { authClient } from "@/lib/auth-client"
+import type { PreferredSlotSelection } from "@/components/preferred-slots-selection"
 
-type AppRole = "super_admin" | "admin" | "staff" | "teacher" | "student"
-
-type DashboardSlot = {
-  id: string
-  courseId: string
-  teacherId: string
-  capacity: number
-  occupancy: number
-  timeSlot?: { id: string; dayOfWeek: number; startTime: string; endTime: string } | null
-  course?: { id: string; name?: string | null } | null
-  teacher?: { id: string; firstName?: string | null; lastName?: string | null; email?: string | null } | null
-}
-
-type DashboardGroup = {
-  timeSlot?: { id: string; dayOfWeek: number; startTime: string; endTime: string } | null
-  slots: DashboardSlot[]
-}
-
-type AttendanceRow = {
-  attendance: {
-    id: string
-    studentId: string
-    classroomSlotId: string
-    classDate: string
-    status: "scheduled" | "present" | "absent" | "late" | "excused"
+function readDate(raw?: unknown) {
+  const today = format(new Date(), "yyyy-MM-dd")
+  if (typeof raw !== "string" || !raw) {
+    return today
   }
-  student?: { id: string; firstName?: string | null; lastName?: string | null; email?: string | null } | null
-}
 
-type StudentOption = {
-  id: string
-  firstName: string
-  lastName: string
-  email: string
-}
-
-type TimeSlot = {
-  id: string
-  dayOfWeek: number
-  startTime: string
-  endTime: string
-  durationMinutes: number
-  isActive: boolean
-}
-
-type ClassroomSlot = {
-  id: string
-  courseId: string
-  teacherId: string
-  capacity: number
-  occupancy: number
-  isActive: boolean
-  timeSlot?: { dayOfWeek?: number; startTime?: string; endTime?: string } | null
-  course?: { name?: string | null } | null
-  teacher?: { firstName?: string | null; lastName?: string | null; email?: string | null } | null
-}
-
-type RescheduleRow = {
-  id: string
-  studentId: string
-  originalAttendanceId: string
-  requestedDate: string
-  requestedSlotId?: string | null
-  status: "pending" | "approved" | "rejected"
-  createdAt: string
-}
-
-const dayLabels = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
-
-function isClassroomAllowed(role: AppRole) {
-  return role === "super_admin" || role === "admin" || role === "staff"
-}
-
-function canManageClassroom(role: AppRole) {
-  return role === "super_admin" || role === "admin"
-}
-
-function formatPersonName(person?: {
-  firstName?: string | null
-  lastName?: string | null
-  email?: string | null
-}) {
-  const fullName = `${person?.firstName ?? ""} ${person?.lastName ?? ""}`.trim()
-  return fullName || person?.email || "-"
-}
-
-function getErrorMessage(error: unknown, fallback: string) {
-  if (error && typeof error === "object" && "message" in error) {
-    const message = (error as { message?: unknown }).message
-    if (typeof message === "string") {
-      return message
-    }
+  const parsed = parse(raw, "yyyy-MM-dd", new Date())
+  if (Number.isNaN(parsed.getTime())) {
+    return today
   }
-  return fallback
+
+  return format(parsed, "yyyy-MM-dd")
 }
 
 export function ClassroomPage() {
   const apiUrl = import.meta.env.VITE_API_URL ?? "http://localhost:4000"
   const queryClient = useQueryClient()
+  const navigate = useNavigate()
+  const search = useSearch({ strict: false }) as Record<string, unknown>
+
   const session = authClient.useSession()
   const role = ((session.data?.user as { role?: AppRole } | undefined)?.role ?? "student") as AppRole
   const canView = isClassroomAllowed(role)
   const canManage = canManageClassroom(role)
 
-  const [activeTab, setActiveTab] = useState("dashboard")
-  const [selectedDay, setSelectedDay] = useState("2")
-  const [selectedDate, setSelectedDate] = useState(() => new Date().toISOString().slice(0, 10))
-  const [selectedSlot, setSelectedSlot] = useState<DashboardSlot | null>(null)
-  const [slotSheetOpen, setSlotSheetOpen] = useState(false)
-  const [studentToAssign, setStudentToAssign] = useState("")
+  const activeTab = typeof search.tab === "string" ? search.tab : "dashboard"
+  const selectedDateText = readDate(search.date)
+  const selectedDate = parse(selectedDateText, "yyyy-MM-dd", new Date())
+  const selectedDay = selectedDate.getDay()
+  const selectedCourseId = typeof search.courseId === "string" ? search.courseId : "all"
+  const selectedTeacherId = typeof search.teacherId === "string" ? search.teacherId : "all"
 
-  const [draftDays, setDraftDays] = useState<Array<{ dayOfWeek: number; isOpen: boolean }>>([])
-  const [slotDayOfWeek, setSlotDayOfWeek] = useState("2")
-  const [slotStartTime, setSlotStartTime] = useState("15:00")
-  const [slotEndTime, setSlotEndTime] = useState("16:00")
-  const [slotDuration, setSlotDuration] = useState("60")
-  const [courseId, setCourseId] = useState("")
-  const [teacherId, setTeacherId] = useState("")
-  const [timeSlotId, setTimeSlotId] = useState("")
-  const [capacity, setCapacity] = useState("10")
+  const [bulkSheetOpen, setBulkSheetOpen] = useState(false)
+  const [bulkCourseId, setBulkCourseId] = useState("")
+  const [bulkTeacherId, setBulkTeacherId] = useState("")
+  const [bulkCapacity, setBulkCapacity] = useState("10")
+  const [bulkSelectedSlots, setBulkSelectedSlots] = useState<PreferredSlotSelection>({})
 
-  const operatingDaysQuery = useQuery({
-    queryKey: ["operating-days", "classroom"],
+  const [singleSheetOpen, setSingleSheetOpen] = useState(false)
+  const [editingClassroomSlot, setEditingClassroomSlot] = useState<ClassroomSlot | null>(null)
+  const [singleCourseId, setSingleCourseId] = useState("")
+  const [singleTeacherId, setSingleTeacherId] = useState("")
+  const [singleTimeSlotId, setSingleTimeSlotId] = useState("")
+  const [singleCapacity, setSingleCapacity] = useState("10")
+
+  const setSearchParams = (patch: Record<string, unknown>) => {
+    navigate({
+      to: "/classroom",
+      search: (prev: Record<string, unknown>) => ({
+        ...prev,
+        ...patch,
+      }),
+      replace: true,
+    })
+  }
+
+  const settingsConfigQuery = useQuery({
+    queryKey: ["settings-config", "classroom"],
     enabled: canView,
-    queryFn: async () => {
-      const response = await fetch(`${apiUrl}/api/v1/operating-days`, { credentials: "include" })
+    queryFn: async (): Promise<SettingsConfigResponse> => {
+      const response = await fetch(`${apiUrl}/api/v1/settings/config`, { credentials: "include" })
       if (!response.ok) {
-        throw new Error("Failed to load operating days")
+        throw new Error("Failed to load settings config")
       }
-      return response.json() as Promise<{ data: Array<{ dayOfWeek: number; isOpen: boolean }> }>
+      return response.json()
     },
   })
 
-  useEffect(() => {
-    const items = operatingDaysQuery.data?.data
-    if (!items) {
-      return
-    }
-    setDraftDays(items.map((item) => ({ dayOfWeek: item.dayOfWeek, isOpen: item.isOpen })))
-  }, [operatingDaysQuery.data?.data])
-
   const dashboardQuery = useQuery({
-    queryKey: ["classroom-dashboard", selectedDay],
+    queryKey: ["classroom-dashboard", selectedDay, selectedCourseId, selectedTeacherId],
     enabled: canView,
     queryFn: async () => {
-      const response = await fetch(`${apiUrl}/api/v1/classroom-dashboard?day=${selectedDay}`, {
-        credentials: "include",
-      })
+      const params = new URLSearchParams({ day: String(selectedDay) })
+      if (selectedCourseId !== "all") {
+        params.set("courseId", selectedCourseId)
+      }
+      if (selectedTeacherId !== "all") {
+        params.set("teacherId", selectedTeacherId)
+      }
+      const response = await fetch(`${apiUrl}/api/v1/classroom-dashboard?${params}`, { credentials: "include" })
       if (!response.ok) {
         throw new Error("Failed to load classroom dashboard")
       }
       return response.json() as Promise<{ data: DashboardGroup[] }>
-    },
-  })
-
-  const attendanceQuery = useQuery({
-    queryKey: ["classroom-attendance", selectedSlot?.id, selectedDate],
-    enabled: canView && slotSheetOpen && Boolean(selectedSlot?.id),
-    queryFn: async () => {
-      const response = await fetch(
-        `${apiUrl}/api/v1/classrooms/${selectedSlot?.id}/attendance?date=${selectedDate}`,
-        { credentials: "include" }
-      )
-      if (!response.ok) {
-        throw new Error("Failed to load attendance")
-      }
-      return response.json() as Promise<{ data: AttendanceRow[] }>
-    },
-  })
-
-  const studentsQuery = useQuery({
-    queryKey: ["classroom-students", selectedSlot?.courseId, selectedSlot?.teacherId],
-    enabled: canManage && slotSheetOpen && Boolean(selectedSlot?.courseId) && Boolean(selectedSlot?.teacherId),
-    queryFn: async () => {
-      const params = new URLSearchParams({
-        courseId: selectedSlot!.courseId,
-        teacherId: selectedSlot!.teacherId,
-      })
-      const response = await fetch(`${apiUrl}/api/v1/students?${params}`, { credentials: "include" })
-      if (!response.ok) {
-        throw new Error("Failed to load students")
-      }
-      return response.json() as Promise<{ data: StudentOption[] }>
     },
   })
 
@@ -223,18 +133,6 @@ export function ClassroomPage() {
         throw new Error("Failed to load reschedule requests")
       }
       return response.json() as Promise<{ data: RescheduleRow[] }>
-    },
-  })
-
-  const timeSlotsQuery = useQuery({
-    queryKey: ["time-slots", "classroom"],
-    enabled: canView,
-    queryFn: async () => {
-      const response = await fetch(`${apiUrl}/api/v1/time-slots`, { credentials: "include" })
-      if (!response.ok) {
-        throw new Error("Failed to load time slots")
-      }
-      return response.json() as Promise<{ data: TimeSlot[] }>
     },
   })
 
@@ -260,7 +158,7 @@ export function ClassroomPage() {
       if (!response.ok) {
         throw new Error("Failed to load courses")
       }
-      return response.json() as Promise<{ data: Array<{ id: string; name: string }> }>
+      return response.json() as Promise<{ data: CourseOption[] }>
     },
   })
 
@@ -274,68 +172,7 @@ export function ClassroomPage() {
       if (!response.ok) {
         throw new Error("Failed to load teachers")
       }
-      return response.json() as Promise<{
-        data: Array<{ id: string; firstName?: string | null; lastName?: string | null; email: string }>
-      }>
-    },
-  })
-
-  const updateAttendanceMutation = useMutation({
-    mutationFn: async ({ attendanceId, status }: { attendanceId: string; status: AttendanceRow["attendance"]["status"] }) => {
-      const response = await fetch(
-        `${apiUrl}/api/v1/classrooms/${selectedSlot?.id}/attendance/${attendanceId}`,
-        {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify({ status }),
-        }
-      )
-      if (!response.ok) {
-        const body = (await response.json().catch(() => ({}))) as { error?: string }
-        throw new Error(body.error || "Failed to update attendance")
-      }
-    },
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["classroom-attendance"] })
-      toast.success("Attendance updated")
-    },
-    onError: (error) => {
-      toast.error(getErrorMessage(error, "Unable to update attendance."))
-    },
-  })
-
-  const assignStudentMutation = useMutation({
-    mutationFn: async () => {
-      if (!selectedSlot || !studentToAssign) {
-        return
-      }
-      const response = await fetch(`${apiUrl}/api/v1/classroom-assignments`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({
-          studentId: studentToAssign,
-          classroomSlotId: selectedSlot.id,
-          startDate: selectedDate,
-          status: "active",
-        }),
-      })
-      if (!response.ok) {
-        const body = (await response.json().catch(() => ({}))) as { error?: string }
-        throw new Error(body.error || "Failed to assign student")
-      }
-    },
-    onSuccess: async () => {
-      setStudentToAssign("")
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["classroom-dashboard"] }),
-        queryClient.invalidateQueries({ queryKey: ["classroom-attendance"] }),
-      ])
-      toast.success("Student assigned to classroom slot")
-    },
-    onError: (error) => {
-      toast.error(getErrorMessage(error, "Unable to assign student."))
+      return response.json() as Promise<{ data: TeacherOption[] }>
     },
   })
 
@@ -361,114 +198,106 @@ export function ClassroomPage() {
     },
   })
 
-  const saveOperatingDaysMutation = useMutation({
+  const createBulkClassroomSlotMutation = useMutation({
     mutationFn: async () => {
-      const response = await fetch(`${apiUrl}/api/v1/operating-days`, {
+      const response = await fetch(`${apiUrl}/api/v1/classroom-slots/bulk`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          courseId: bulkCourseId,
+          teacherId: bulkTeacherId,
+          capacity: Number(bulkCapacity),
+          slotSelections: bulkSelectedSlots,
+        }),
+      })
+      if (!response.ok) {
+        const body = (await response.json().catch(() => ({}))) as { error?: string }
+        throw new Error(body.error || "Failed to create bulk classroom allocations")
+      }
+      return response.json() as Promise<{ data: { created: number; updated: number; total: number } }>
+    },
+    onSuccess: async (result) => {
+      setBulkCourseId("")
+      setBulkTeacherId("")
+      setBulkCapacity("10")
+      setBulkSelectedSlots({})
+      setBulkSheetOpen(false)
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["classroom-slots", "classroom"] }),
+        queryClient.invalidateQueries({ queryKey: ["classroom-dashboard"] }),
+      ])
+      toast.success(`Bulk allocation saved (${result.data.created} created, ${result.data.updated} updated)`)
+    },
+    onError: (error) => {
+      toast.error(getErrorMessage(error, "Unable to save bulk classroom allocations."))
+    },
+  })
+
+  const updateClassroomSlotMutation = useMutation({
+    mutationFn: async () => {
+      if (!editingClassroomSlot) {
+        return
+      }
+
+      const response = await fetch(`${apiUrl}/api/v1/classroom-slots/${editingClassroomSlot.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify(draftDays),
-      })
-      if (!response.ok) {
-        const body = (await response.json().catch(() => ({}))) as { error?: string }
-        throw new Error(body.error || "Failed to save operating days")
-      }
-    },
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["operating-days"] })
-      toast.success("Operating days updated")
-    },
-    onError: (error) => {
-      toast.error(getErrorMessage(error, "Unable to save operating days."))
-    },
-  })
-
-  const createTimeSlotMutation = useMutation({
-    mutationFn: async () => {
-      const response = await fetch(`${apiUrl}/api/v1/time-slots`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
         body: JSON.stringify({
-          dayOfWeek: Number(slotDayOfWeek),
-          startTime: slotStartTime,
-          endTime: slotEndTime,
-          durationMinutes: Number(slotDuration),
-          isActive: true,
+          courseId: singleCourseId,
+          teacherId: singleTeacherId,
+          timeSlotId: singleTimeSlotId,
+          capacity: Number(singleCapacity),
         }),
       })
       if (!response.ok) {
         const body = (await response.json().catch(() => ({}))) as { error?: string }
-        throw new Error(body.error || "Failed to create time slot")
+        throw new Error(body.error || "Failed to update classroom slot")
       }
     },
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["time-slots"] })
-      toast.success("Time slot created")
-    },
-    onError: (error) => {
-      toast.error(getErrorMessage(error, "Unable to create time slot."))
-    },
-  })
-
-  const deleteTimeSlotMutation = useMutation({
-    mutationFn: async (id: string) => {
-      const response = await fetch(`${apiUrl}/api/v1/time-slots/${id}`, {
-        method: "DELETE",
-        credentials: "include",
-      })
-      if (!response.ok) {
-        const body = (await response.json().catch(() => ({}))) as { error?: string }
-        throw new Error(body.error || "Failed to delete time slot")
-      }
-    },
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["time-slots"] })
-      toast.success("Time slot archived")
-    },
-    onError: (error) => {
-      toast.error(getErrorMessage(error, "Unable to archive time slot."))
-    },
-  })
-
-  const createClassroomSlotMutation = useMutation({
-    mutationFn: async () => {
-      const response = await fetch(`${apiUrl}/api/v1/classroom-slots`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({
-          courseId,
-          teacherId,
-          timeSlotId,
-          capacity: Number(capacity),
-          isActive: true,
-        }),
-      })
-      if (!response.ok) {
-        const body = (await response.json().catch(() => ({}))) as { error?: string }
-        throw new Error(body.error || "Failed to create classroom slot")
-      }
-    },
-    onSuccess: async () => {
-      setCourseId("")
-      setTeacherId("")
-      setTimeSlotId("")
-      setCapacity("10")
+      setSingleSheetOpen(false)
+      setEditingClassroomSlot(null)
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["classroom-slots"] }),
+        queryClient.invalidateQueries({ queryKey: ["classroom-slots", "classroom"] }),
         queryClient.invalidateQueries({ queryKey: ["classroom-dashboard"] }),
       ])
-      toast.success("Classroom allocation created")
+      toast.success("Classroom allocation updated")
     },
     onError: (error) => {
-      toast.error(getErrorMessage(error, "Unable to create classroom allocation."))
+      toast.error(getErrorMessage(error, "Unable to update classroom allocation."))
+    },
+  })
+
+  const archiveClassroomSlotMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const response = await fetch(`${apiUrl}/api/v1/classroom-slots/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ isActive: false }),
+      })
+      if (!response.ok) {
+        const body = (await response.json().catch(() => ({}))) as { error?: string }
+        throw new Error(body.error || "Failed to archive classroom slot")
+      }
+    },
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["classroom-slots", "classroom"] }),
+        queryClient.invalidateQueries({ queryKey: ["classroom-dashboard"] }),
+      ])
+      toast.success("Classroom allocation archived")
+    },
+    onError: (error) => {
+      toast.error(getErrorMessage(error, "Unable to archive classroom allocation."))
     },
   })
 
   const deleteClassroomSlotMutation = useMutation({
     mutationFn: async (id: string) => {
-      const response = await fetch(`${apiUrl}/api/v1/classroom-slots/${id}`, {
+      const response = await fetch(`${apiUrl}/api/v1/classroom-slots/${id}?hardDelete=true`, {
         method: "DELETE",
         credentials: "include",
       })
@@ -479,13 +308,13 @@ export function ClassroomPage() {
     },
     onSuccess: async () => {
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["classroom-slots"] }),
+        queryClient.invalidateQueries({ queryKey: ["classroom-slots", "classroom"] }),
         queryClient.invalidateQueries({ queryKey: ["classroom-dashboard"] }),
       ])
-      toast.success("Classroom allocation archived")
+      toast.success("Classroom allocation deleted")
     },
     onError: (error) => {
-      toast.error(getErrorMessage(error, "Unable to archive classroom allocation."))
+      toast.error(getErrorMessage(error, "Unable to delete classroom allocation."))
     },
   })
 
@@ -493,187 +322,183 @@ export function ClassroomPage() {
     if (dashboardQuery.isError) {
       toast.error(getErrorMessage(dashboardQuery.error, "Unable to load classroom dashboard."))
     }
-  }, [dashboardQuery.isError, dashboardQuery.error])
+  }, [dashboardQuery.error, dashboardQuery.isError])
 
-  const tabs = useMemo(() => {
-    return [
-      { value: "dashboard", label: "Dashboard", visible: canView },
-      { value: "attendance", label: "Attendance", visible: canView },
-      { value: "enrollments", label: "Enrollments", visible: canView },
-      { value: "config", label: "Config", visible: canManage },
-    ].filter((tab) => tab.visible)
-  }, [canManage, canView])
+  useEffect(() => {
+    if (!search.tab || !search.date) {
+      setSearchParams({
+        tab: activeTab,
+        date: selectedDateText,
+        courseId: selectedCourseId,
+        teacherId: selectedTeacherId,
+      })
+    }
+  }, [activeTab, search.date, search.tab, selectedCourseId, selectedDateText, selectedTeacherId])
 
-  const rescheduleColumns = useMemo<ColumnDef<RescheduleRow>[]>(() => {
-    return [
-      {
-        id: "requested_date",
-        accessorKey: "requestedDate",
-        header: "Requested date",
-      },
-      {
-        id: "student_id",
-        accessorKey: "studentId",
-        header: "Student",
-        cell: ({ row }) => <span className="font-mono text-xs">{row.original.studentId}</span>,
-      },
-      {
-        id: "status",
-        accessorKey: "status",
-        filterFn: (row, columnId, filterValues) => {
-          const selected = Array.isArray(filterValues) ? (filterValues as string[]) : []
-          if (!selected.length) return true
-          return selected.includes(String(row.getValue(columnId)))
+  useEffect(() => {
+    if (!editingClassroomSlot) {
+      return
+    }
+
+    setSingleCourseId(editingClassroomSlot.courseId)
+    setSingleTeacherId(editingClassroomSlot.teacherId)
+    setSingleTimeSlotId(editingClassroomSlot.timeSlot?.id ?? "")
+    setSingleCapacity(String(editingClassroomSlot.capacity))
+  }, [editingClassroomSlot])
+
+  const tabs = useMemo(
+    () =>
+      [
+        { value: "dashboard", label: "Dashboard", visible: canView },
+        { value: "attendance", label: "Attendance", visible: canView },
+        { value: "enrollments", label: "Enrollments", visible: canView },
+        { value: "config", label: "Config", visible: canManage },
+      ].filter((tab) => tab.visible),
+    [canManage, canView]
+  )
+
+  const dashboardSlots = useMemo(() => {
+    const slots: DashboardSlot[] = []
+
+    for (const group of dashboardQuery.data?.data ?? []) {
+      for (const slot of group.slots) {
+        slots.push({
+          ...slot,
+          timeSlot: group.timeSlot,
+        })
+      }
+    }
+
+    return slots.sort((a, b) => {
+      const aStart = a.timeSlot?.startTime ?? ""
+      const bStart = b.timeSlot?.startTime ?? ""
+      return aStart.localeCompare(bStart)
+    })
+  }, [dashboardQuery.data?.data])
+
+  const bulkSelectedCount = useMemo(
+    () => Object.values(bulkSelectedSlots).reduce((acc, items) => acc + items.length, 0),
+    [bulkSelectedSlots]
+  )
+
+  const timeSlots = useMemo<TimeSlot[]>(() => {
+    const slots: TimeSlot[] = []
+    for (const day of settingsConfigQuery.data?.data ?? []) {
+      if (!day.isOpen) {
+        continue
+      }
+      for (const slot of day.slots) {
+        slots.push({
+          id: slot.id,
+          dayOfWeek: day.dayOfWeek,
+          startTime: slot.startTime,
+          endTime: slot.endTime,
+          durationMinutes: 60,
+          isActive: true,
+        })
+      }
+    }
+    return slots.sort((a, b) => a.dayOfWeek - b.dayOfWeek || a.startTime.localeCompare(b.startTime))
+  }, [settingsConfigQuery.data?.data])
+
+  const bulkDays = useMemo(
+    () =>
+      (settingsConfigQuery.data?.data ?? [])
+        .filter((day) => day.isOpen)
+        .map((day) => ({ id: day.dayOfWeek, label: dayLabels[day.dayOfWeek]?.slice(0, 3) ?? `D${day.dayOfWeek}` })),
+    [settingsConfigQuery.data?.data]
+  )
+
+  const allocatedByTimeSlot = useMemo(() => {
+    const map = new Map<string, boolean>()
+    if (!bulkCourseId || !bulkTeacherId) {
+      return map
+    }
+
+    for (const slot of classroomSlotsQuery.data?.data ?? []) {
+      if (!slot.isActive || !slot.timeSlot?.id) {
+        continue
+      }
+      if (slot.courseId === bulkCourseId && slot.teacherId === bulkTeacherId) {
+        map.set(slot.timeSlot.id, true)
+      }
+    }
+
+    return map
+  }, [bulkCourseId, bulkTeacherId, classroomSlotsQuery.data?.data])
+
+  const bulkSlotsByDay = useMemo(() => {
+    const grouped: Record<number, Array<{ id: string; label: string; allocated?: boolean }>> = {}
+    for (const slot of timeSlots) {
+      const items = grouped[slot.dayOfWeek] ?? []
+      items.push({
+        id: slot.id,
+        label: formatTimeLabel(slot.startTime),
+        allocated: allocatedByTimeSlot.get(slot.id) === true,
+      })
+      grouped[slot.dayOfWeek] = items
+    }
+    return grouped
+  }, [allocatedByTimeSlot, timeSlots])
+
+  const allocatedDayLabels = useMemo(() => {
+    if (!bulkCourseId || !bulkTeacherId) {
+      return [] as string[]
+    }
+
+    const daySet = new Set<number>()
+    for (const slot of classroomSlotsQuery.data?.data ?? []) {
+      if (!slot.isActive || slot.courseId !== bulkCourseId || slot.teacherId !== bulkTeacherId) {
+        continue
+      }
+      if (typeof slot.timeSlot?.dayOfWeek === "number") {
+        daySet.add(slot.timeSlot.dayOfWeek)
+      }
+    }
+
+    return Array.from(daySet)
+      .sort((a, b) => a - b)
+      .map((day) => dayLabels[day])
+      .filter(Boolean)
+  }, [bulkCourseId, bulkTeacherId, classroomSlotsQuery.data?.data])
+
+  const teacherFilterOptions = useMemo(() => {
+    const seen = new Set<string>()
+    const options: Array<{ label: string; value: string }> = []
+
+    for (const teacher of teachersQuery.data?.data ?? []) {
+      if (seen.has(teacher.id)) {
+        continue
+      }
+      seen.add(teacher.id)
+      options.push({ label: formatPersonName(teacher), value: teacher.id })
+    }
+
+    return options
+  }, [teachersQuery.data?.data])
+
+  const rescheduleColumns = useMemo(
+    () =>
+      createRescheduleColumns({
+        canManage,
+        onApprove: (id) => updateRescheduleMutation.mutate({ id, status: "approved" }),
+        onReject: (id) => updateRescheduleMutation.mutate({ id, status: "rejected" }),
+      }),
+    [canManage, updateRescheduleMutation]
+  )
+
+  const classroomSlotColumns = useMemo(
+    () =>
+      createClassroomSlotColumns({
+        onUpdate: (row) => {
+          setEditingClassroomSlot(row)
+          setSingleSheetOpen(true)
         },
-        header: "Status",
-        cell: ({ row }) => <Badge variant="outline">{row.original.status}</Badge>,
-      },
-      {
-        id: "created_at",
-        accessorKey: "createdAt",
-        header: "Created",
-        cell: ({ row }) => new Date(row.original.createdAt).toLocaleDateString(),
-      },
-      {
-        id: "actions",
-        header: "Actions",
-        cell: ({ row }) =>
-          canManage ? (
-            <div className="flex justify-end gap-2">
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={(event) => {
-                  event.stopPropagation()
-                  updateRescheduleMutation.mutate({ id: row.original.id, status: "rejected" })
-                }}
-              >
-                Reject
-              </Button>
-              <Button
-                size="sm"
-                onClick={(event) => {
-                  event.stopPropagation()
-                  updateRescheduleMutation.mutate({ id: row.original.id, status: "approved" })
-                }}
-              >
-                Approve
-              </Button>
-            </div>
-          ) : (
-            <span className="text-xs text-muted-foreground">View only</span>
-          ),
-      },
-    ]
-  }, [canManage, updateRescheduleMutation])
-
-  const timeSlotColumns = useMemo<ColumnDef<TimeSlot>[]>(() => {
-    return [
-      {
-        id: "day",
-        accessorFn: (row) => dayLabels[row.dayOfWeek],
-        header: "Day",
-      },
-      {
-        id: "start",
-        accessorFn: (row) => row.startTime.slice(0, 5),
-        header: "Start",
-      },
-      {
-        id: "end",
-        accessorFn: (row) => row.endTime.slice(0, 5),
-        header: "End",
-      },
-      {
-        id: "duration",
-        accessorFn: (row) => `${row.durationMinutes}m`,
-        header: "Duration",
-      },
-      {
-        id: "status",
-        accessorFn: (row) => (row.isActive ? "active" : "archived"),
-        filterFn: (row, columnId, filterValues) => {
-          const selected = Array.isArray(filterValues) ? (filterValues as string[]) : []
-          if (!selected.length) return true
-          return selected.includes(String(row.getValue(columnId)))
-        },
-        header: "Status",
-      },
-      {
-        id: "actions",
-        header: "Actions",
-        cell: ({ row }) =>
-          row.original.isActive ? (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={(event) => {
-                event.stopPropagation()
-                deleteTimeSlotMutation.mutate(row.original.id)
-              }}
-            >
-              Archive
-            </Button>
-          ) : (
-            <span className="text-xs text-muted-foreground">-</span>
-          ),
-      },
-    ]
-  }, [deleteTimeSlotMutation])
-
-  const classroomSlotColumns = useMemo<ColumnDef<ClassroomSlot>[]>(() => {
-    return [
-      {
-        id: "day",
-        accessorFn: (row) => dayLabels[row.timeSlot?.dayOfWeek ?? 0],
-        header: "Day",
-      },
-      {
-        id: "start",
-        accessorFn: (row) => row.timeSlot?.startTime?.slice(0, 5) ?? "-",
-        header: "Start",
-      },
-      {
-        id: "course_name",
-        accessorFn: (row) => row.course?.name ?? "-",
-        header: "Course",
-      },
-      {
-        id: "teacher_name",
-        accessorFn: (row) => formatPersonName(row.teacher ?? undefined),
-        header: "Teacher",
-      },
-      {
-        id: "capacity",
-        accessorKey: "capacity",
-        header: "Capacity",
-      },
-      {
-        id: "occupancy",
-        accessorKey: "occupancy",
-        header: "Occupancy",
-      },
-      {
-        id: "actions",
-        header: "Actions",
-        cell: ({ row }) =>
-          row.original.isActive ? (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={(event) => {
-                event.stopPropagation()
-                deleteClassroomSlotMutation.mutate(row.original.id)
-              }}
-            >
-              Archive
-            </Button>
-          ) : (
-            <span className="text-xs text-muted-foreground">-</span>
-          ),
-      },
-    ]
-  }, [deleteClassroomSlotMutation])
+        onArchive: (id) => archiveClassroomSlotMutation.mutate(id),
+        onDelete: (id) => deleteClassroomSlotMutation.mutate(id),
+      }),
+    [archiveClassroomSlotMutation, deleteClassroomSlotMutation]
+  )
 
   if (!canView) {
     return (
@@ -692,12 +517,10 @@ export function ClassroomPage() {
     <div className="mx-auto w-full max-w-7xl space-y-6">
       <div>
         <h1 className="text-2xl font-semibold">Classroom</h1>
-        <p className="text-sm text-muted-foreground">
-          Manage classroom slots, attendance, enrollments, and operating configuration.
-        </p>
+        <p className="text-sm text-muted-foreground">Track class schedules, teachers, and student occupancy.</p>
       </div>
 
-      <Tabs value={activeTab} onValueChange={setActiveTab}>
+      <Tabs value={activeTab} onValueChange={(value) => setSearchParams({ tab: value })}>
         <TabsList>
           {tabs.map((tab) => (
             <TabsTrigger key={tab.value} value={tab.value}>
@@ -710,66 +533,47 @@ export function ClassroomPage() {
           <Card>
             <CardHeader>
               <CardTitle>Classroom dashboard</CardTitle>
-              <CardDescription>Cards are grouped by time slot. Click a card for attendance and enrollment.</CardDescription>
+              <CardDescription>Review weekly classes by course and teacher, then open a class to manage attendance.</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center gap-2">
-                <Label htmlFor="classroom-day">Day</Label>
-                <Select value={selectedDay} onValueChange={setSelectedDay}>
-                  <SelectTrigger id="classroom-day" className="w-[220px]">
-                    <SelectValue placeholder="Select day" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {dayLabels.map((label, index) => (
-                      <SelectItem key={label} value={String(index)}>
-                        {label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+            <CardContent className="grid gap-4 lg:grid-cols-[1fr_320px]">
+              <div className="space-y-4">
+                <WeekPicker
+                  currentDate={selectedDate}
+                  highlightDate={selectedDate}
+                  onSelectDate={(date) => setSearchParams({ date: format(date, "yyyy-MM-dd") })}
+                />
 
-              {dashboardQuery.isLoading ? (
-                <p className="text-sm text-muted-foreground">Loading classroom dashboard...</p>
-              ) : null}
+                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                  {dashboardSlots.map((slot, index) => (
+                    <ClassCard
+                      key={slot.id}
+                      index={index}
+                      slot={slot}
+                      onClick={() => {
+                        navigate({
+                          to: `/classroom/class/${slot.id}`,
+                          search: { date: selectedDateText, classNo: String(index + 1) },
+                        })
+                      }}
+                    />
+                  ))}
+                </div>
 
-              <div className="space-y-5">
-                {(dashboardQuery.data?.data ?? []).map((group) => (
-                  <div key={group.timeSlot?.id ?? Math.random().toString()} className="space-y-3">
-                    <div className="text-sm font-medium">
-                      {group.timeSlot ? `${dayLabels[group.timeSlot.dayOfWeek]} ${group.timeSlot.startTime.slice(0, 5)} - ${group.timeSlot.endTime.slice(0, 5)}` : "Unknown time slot"}
-                    </div>
-                    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                      {group.slots.map((slot) => (
-                        <button
-                          key={slot.id}
-                          type="button"
-                          className="rounded-lg border p-4 text-left transition hover:bg-muted/40"
-                          onClick={() => {
-                            setSelectedSlot(slot)
-                            setSlotSheetOpen(true)
-                          }}
-                        >
-                          <div className="flex items-center justify-between gap-2">
-                            <p className="font-medium">{slot.course?.name ?? "Unassigned course"}</p>
-                            <Badge variant={slot.occupancy >= slot.capacity ? "destructive" : "secondary"}>
-                              {slot.occupancy}/{slot.capacity}
-                            </Badge>
-                          </div>
-                          <p className="mt-1 text-sm text-muted-foreground">Teacher: {formatPersonName(slot.teacher ?? undefined)}</p>
-                          <p className="mt-2 text-xs text-muted-foreground">Click to manage attendance and enrollments</p>
-                        </button>
-                      ))}
-                      {group.slots.length === 0 ? (
-                        <p className="text-sm text-muted-foreground">No classroom slots for this time.</p>
-                      ) : null}
-                    </div>
-                  </div>
-                ))}
-                {!dashboardQuery.isLoading && !(dashboardQuery.data?.data ?? []).length ? (
-                  <p className="text-sm text-muted-foreground">No classroom slots found for this day.</p>
+                {!dashboardSlots.length && !dashboardQuery.isLoading ? (
+                  <p className="text-sm text-muted-foreground">No classes found for the selected date and filters.</p>
                 ) : null}
               </div>
+
+              <DashboardFilters
+                courses={coursesQuery.data?.data ?? []}
+                teachers={teachersQuery.data?.data ?? []}
+                selectedCourseId={selectedCourseId}
+                onCourseChange={(value) => setSearchParams({ courseId: value })}
+                selectedTeacherId={selectedTeacherId}
+                onTeacherChange={(value) => setSearchParams({ teacherId: value })}
+                selectedDate={selectedDate}
+                onDateChange={(date) => setSearchParams({ date: format(date, "yyyy-MM-dd") })}
+              />
             </CardContent>
           </Card>
         </TabsContent>
@@ -786,13 +590,7 @@ export function ClassroomPage() {
                 data={rescheduleQuery.data?.data ?? []}
                 searchableColumnIds={["student_id"]}
                 searchPlaceholder="Search by student id"
-                filters={[
-                  {
-                    title: "Status",
-                    columnId: "status",
-                    options: [{ label: "Pending", value: "pending" }],
-                  },
-                ]}
+                filters={[{ title: "Status", columnId: "status", options: [{ label: "Pending", value: "pending" }] }]}
                 isLoading={rescheduleQuery.isLoading}
                 loadingMessage="Loading pending requests..."
                 emptyMessage="No pending requests."
@@ -805,9 +603,7 @@ export function ClassroomPage() {
           <Card>
             <CardHeader>
               <CardTitle>Enrollment actions</CardTitle>
-              <CardDescription>
-                Use the Dashboard tab and click a classroom card to add students to that slot.
-              </CardDescription>
+              <CardDescription>Open a class from Dashboard to update attendance and student statuses.</CardDescription>
             </CardHeader>
           </Card>
         </TabsContent>
@@ -815,69 +611,29 @@ export function ClassroomPage() {
         <TabsContent value="config" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>Operating days</CardTitle>
-              <CardDescription>Set which weekdays are open for classroom assignments.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {draftDays.map((day, index) => (
-                <div key={day.dayOfWeek} className="flex items-center justify-between rounded border px-3 py-2">
-                  <span className="text-sm font-medium">{dayLabels[day.dayOfWeek]}</span>
-                  <Switch
-                    checked={day.isOpen}
-                    onCheckedChange={(checked) =>
-                      setDraftDays((prev) =>
-                        prev.map((item, itemIndex) =>
-                          itemIndex === index ? { ...item, isOpen: checked } : item
-                        )
-                      )
-                    }
-                  />
-                </div>
-              ))}
-              <Button onClick={() => saveOperatingDaysMutation.mutate()} disabled={saveOperatingDaysMutation.isPending}>
-                {saveOperatingDaysMutation.isPending ? "Saving..." : "Save operating days"}
-              </Button>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Time slots</CardTitle>
-              <CardDescription>Create and archive slot templates by day and time.</CardDescription>
+              <CardTitle>Classroom allocations</CardTitle>
+              <CardDescription>
+                Manage allocations in bulk. Use row actions to update or archive individual entries.
+              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid gap-3 md:grid-cols-5">
-                <Select value={slotDayOfWeek} onValueChange={setSlotDayOfWeek}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Day" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {dayLabels.map((label, index) => (
-                      <SelectItem key={label} value={String(index)}>
-                        {label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Input type="time" value={slotStartTime} onChange={(event) => setSlotStartTime(event.target.value)} />
-                <Input type="time" value={slotEndTime} onChange={(event) => setSlotEndTime(event.target.value)} />
-                <Input
-                  type="number"
-                  min={30}
-                  value={slotDuration}
-                  onChange={(event) => setSlotDuration(event.target.value)}
-                />
-                <Button onClick={() => createTimeSlotMutation.mutate()} disabled={createTimeSlotMutation.isPending}>
-                  {createTimeSlotMutation.isPending ? "Saving..." : "Add time slot"}
+              <div className="flex justify-end">
+                <Button variant="outline" onClick={() => setBulkSheetOpen(true)}>
+                  Bulk allocation
                 </Button>
               </div>
 
               <DataTable
-                columns={timeSlotColumns}
-                data={timeSlotsQuery.data?.data ?? []}
-                searchableColumnIds={["day", "start", "end"]}
-                searchPlaceholder="Search day or time"
+                columns={classroomSlotColumns}
+                data={classroomSlotsQuery.data?.data ?? []}
+                searchableColumnIds={["course_name", "teacher_name", "day_time"]}
+                searchPlaceholder="Search by course, teacher or day"
                 filters={[
+                  {
+                    title: "Teacher",
+                    columnId: "teacher_id",
+                    options: teacherFilterOptions,
+                  },
                   {
                     title: "Status",
                     columnId: "status",
@@ -887,82 +643,8 @@ export function ClassroomPage() {
                     ],
                   },
                 ]}
-                isLoading={timeSlotsQuery.isLoading}
-                loadingMessage="Loading time slots..."
-                emptyMessage="No time slots found."
-              />
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Classroom allocations</CardTitle>
-              <CardDescription>Map course + teacher + time slot with capacity.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid gap-3 md:grid-cols-5">
-                <Select value={courseId} onValueChange={setCourseId}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Course" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {(coursesQuery.data?.data ?? []).map((course) => (
-                      <SelectItem key={course.id} value={course.id}>
-                        {course.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-
-                <Select value={teacherId} onValueChange={setTeacherId}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Teacher" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {(teachersQuery.data?.data ?? []).map((teacher) => (
-                      <SelectItem key={teacher.id} value={teacher.id}>
-                        {formatPersonName(teacher)}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-
-                <Select value={timeSlotId} onValueChange={setTimeSlotId}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Time slot" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {(timeSlotsQuery.data?.data ?? [])
-                      .filter((slot) => slot.isActive)
-                      .map((slot) => (
-                        <SelectItem key={slot.id} value={slot.id}>
-                          {dayLabels[slot.dayOfWeek]} {slot.startTime.slice(0, 5)}
-                        </SelectItem>
-                      ))}
-                  </SelectContent>
-                </Select>
-
-                <Input
-                  type="number"
-                  min={1}
-                  value={capacity}
-                  onChange={(event) => setCapacity(event.target.value)}
-                  placeholder="Capacity"
-                />
-
-                <Button
-                  onClick={() => createClassroomSlotMutation.mutate()}
-                  disabled={!courseId || !teacherId || !timeSlotId || Number(capacity) < 1}
-                >
-                  Add allocation
-                </Button>
-              </div>
-
-              <DataTable
-                columns={classroomSlotColumns}
-                data={classroomSlotsQuery.data?.data ?? []}
-                searchableColumnIds={["course_name", "teacher_name"]}
-                searchPlaceholder="Search by course or teacher"
+                initialColumnFilters={[{ id: "status", value: ["active"] }]}
+                initialColumnVisibility={{ teacher_id: false }}
                 isLoading={classroomSlotsQuery.isLoading}
                 loadingMessage="Loading classroom allocations..."
                 emptyMessage="No classroom allocations found."
@@ -972,117 +654,49 @@ export function ClassroomPage() {
         </TabsContent>
       </Tabs>
 
-      <Sheet open={slotSheetOpen} onOpenChange={setSlotSheetOpen}>
-        <SheetContent className="w-full overflow-y-auto sm:max-w-2xl">
-          <SheetHeader>
-            <SheetTitle>{selectedSlot?.course?.name ?? "Classroom slot"}</SheetTitle>
-            <SheetDescription>
-              {selectedSlot?.timeSlot
-                ? `${dayLabels[selectedSlot.timeSlot.dayOfWeek]} ${selectedSlot.timeSlot.startTime.slice(0, 5)} - ${selectedSlot.timeSlot.endTime.slice(0, 5)}`
-                : "Manage attendance and enrollments"}
-            </SheetDescription>
-          </SheetHeader>
+      <ClassroomBulkAllocationSheet
+        open={bulkSheetOpen}
+        onOpenChange={setBulkSheetOpen}
+        courses={coursesQuery.data?.data ?? []}
+        teachers={teachersQuery.data?.data ?? []}
+        courseId={bulkCourseId}
+        setCourseId={setBulkCourseId}
+        teacherId={bulkTeacherId}
+        setTeacherId={setBulkTeacherId}
+        capacity={bulkCapacity}
+        setCapacity={setBulkCapacity}
+        days={bulkDays}
+        slotsByDay={bulkSlotsByDay}
+        selectedSlots={bulkSelectedSlots}
+        setSelectedSlots={setBulkSelectedSlots}
+        selectedCount={bulkSelectedCount}
+        allocatedDayLabels={allocatedDayLabels}
+        onSave={() => createBulkClassroomSlotMutation.mutate()}
+        isSaving={createBulkClassroomSlotMutation.isPending}
+      />
 
-          <div className="mt-6 space-y-5">
-            <div className="rounded-md border p-4 text-sm">
-              <p>
-                <span className="font-medium">Teacher:</span> {formatPersonName(selectedSlot?.teacher ?? undefined)}
-              </p>
-              <p className="mt-1">
-                <span className="font-medium">Occupancy:</span> {selectedSlot?.occupancy ?? 0}/{selectedSlot?.capacity ?? 0}
-              </p>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="attendance-date">Attendance date</Label>
-              <Input
-                id="attendance-date"
-                type="date"
-                value={selectedDate}
-                onChange={(event) => setSelectedDate(event.target.value)}
-              />
-            </div>
-
-            {canManage ? (
-              <div className="space-y-2 rounded-md border p-3">
-                <Label>Add student to slot</Label>
-                <div className="flex items-center gap-2">
-                  <Select value={studentToAssign} onValueChange={setStudentToAssign}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select student" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {(studentsQuery.data?.data ?? []).map((student) => (
-                        <SelectItem key={student.id} value={student.id}>
-                          {student.firstName} {student.lastName} ({student.email})
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <Button
-                    onClick={() => assignStudentMutation.mutate()}
-                    disabled={!studentToAssign || assignStudentMutation.isPending}
-                  >
-                    Assign
-                  </Button>
-                </div>
-              </div>
-            ) : null}
-
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label>Attendance list</Label>
-                <Badge variant="outline">{attendanceQuery.data?.data?.length ?? 0}</Badge>
-              </div>
-
-              {attendanceQuery.isLoading ? (
-                <p className="text-sm text-muted-foreground">Loading attendance...</p>
-              ) : null}
-
-              <div className="space-y-2">
-                {(attendanceQuery.data?.data ?? []).map((row) => (
-                  <div key={row.attendance.id} className="rounded-md border p-3 text-sm">
-                    <div className="flex items-center justify-between gap-3">
-                      <div>
-                        <p className="font-medium">{formatPersonName(row.student ?? undefined)}</p>
-                        <p className="text-xs text-muted-foreground">{row.student?.email || row.attendance.studentId}</p>
-                      </div>
-                      {canManage ? (
-                        <Select
-                          value={row.attendance.status}
-                          onValueChange={(value) =>
-                            updateAttendanceMutation.mutate({
-                              attendanceId: row.attendance.id,
-                              status: value as AttendanceRow["attendance"]["status"],
-                            })
-                          }
-                        >
-                          <SelectTrigger className="w-[140px]">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="scheduled">Scheduled</SelectItem>
-                            <SelectItem value="present">Present</SelectItem>
-                            <SelectItem value="absent">Absent</SelectItem>
-                            <SelectItem value="late">Late</SelectItem>
-                            <SelectItem value="excused">Excused</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      ) : (
-                        <Badge variant="outline">{row.attendance.status}</Badge>
-                      )}
-                    </div>
-                  </div>
-                ))}
-
-                {!attendanceQuery.isLoading && !(attendanceQuery.data?.data ?? []).length ? (
-                  <p className="text-sm text-muted-foreground">No attendance rows found for this date.</p>
-                ) : null}
-              </div>
-            </div>
-          </div>
-        </SheetContent>
-      </Sheet>
+      <ClassroomSingleAllocationSheet
+        open={singleSheetOpen}
+        onOpenChange={(open) => {
+          setSingleSheetOpen(open)
+          if (!open) {
+            setEditingClassroomSlot(null)
+          }
+        }}
+        courseId={singleCourseId}
+        setCourseId={setSingleCourseId}
+        teacherId={singleTeacherId}
+        setTeacherId={setSingleTeacherId}
+        timeSlotId={singleTimeSlotId}
+        setTimeSlotId={setSingleTimeSlotId}
+        capacity={singleCapacity}
+        setCapacity={setSingleCapacity}
+        courses={coursesQuery.data?.data ?? []}
+        teachers={teachersQuery.data?.data ?? []}
+        timeSlots={timeSlots}
+        onSave={() => updateClassroomSlotMutation.mutate()}
+        isSaving={updateClassroomSlotMutation.isPending}
+      />
     </div>
   )
 }

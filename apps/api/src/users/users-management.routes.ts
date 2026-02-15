@@ -8,6 +8,7 @@ import {
   listStudentRescheduleRequests,
   makeCreateAttendanceHandler,
   makeDeleteAttendanceHandler,
+  makeDeleteUserHandler,
   makeGetUserHandler,
   makeListAttendanceHandler,
   makeListUsersHandler,
@@ -25,6 +26,7 @@ usersManagementRouter.get("/students", makeListUsersHandler("student"));
 usersManagementRouter.post("/students", makeCreateUserHandler("student"));
 usersManagementRouter.get("/students/:id", makeGetUserHandler("student"));
 usersManagementRouter.patch("/students/:id", makePatchUserHandler("student"));
+usersManagementRouter.delete("/students/:id", makeDeleteUserHandler("student"));
 usersManagementRouter.get("/students/:id/attendance", makeListAttendanceHandler("student"));
 usersManagementRouter.post("/students/:id/attendance", makeCreateAttendanceHandler("student"));
 usersManagementRouter.patch(
@@ -46,6 +48,7 @@ usersManagementRouter.get("/teachers", makeListUsersHandler("teacher"));
 usersManagementRouter.post("/teachers", makeCreateUserHandler("teacher"));
 usersManagementRouter.get("/teachers/:id", makeGetUserHandler("teacher"));
 usersManagementRouter.patch("/teachers/:id", makePatchUserHandler("teacher"));
+usersManagementRouter.delete("/teachers/:id", makeDeleteUserHandler("teacher"));
 usersManagementRouter.get("/teachers/:id/attendance", makeListAttendanceHandler("teacher"));
 usersManagementRouter.post("/teachers/:id/attendance", makeCreateAttendanceHandler("teacher"));
 usersManagementRouter.patch(
@@ -61,6 +64,7 @@ usersManagementRouter.get("/staff", makeListUsersHandler("staff"));
 usersManagementRouter.post("/staff", makeCreateUserHandler("staff"));
 usersManagementRouter.get("/staff/:id", makeGetUserHandler("staff"));
 usersManagementRouter.patch("/staff/:id", makePatchUserHandler("staff"));
+usersManagementRouter.delete("/staff/:id", makeDeleteUserHandler("staff"));
 usersManagementRouter.get("/staff/:id/attendance", makeListAttendanceHandler("staff"));
 usersManagementRouter.post("/staff/:id/attendance", makeCreateAttendanceHandler("staff"));
 usersManagementRouter.patch(
@@ -76,6 +80,7 @@ usersManagementRouter.get("/admins", makeListUsersHandler("admin"));
 usersManagementRouter.post("/admins", makeCreateUserHandler("admin"));
 usersManagementRouter.get("/admins/:id", makeGetUserHandler("admin"));
 usersManagementRouter.patch("/admins/:id", makePatchUserHandler("admin"));
+usersManagementRouter.delete("/admins/:id", makeDeleteUserHandler("admin"));
 usersManagementRouter.get("/admins/:id/attendance", makeListAttendanceHandler("admin"));
 usersManagementRouter.post("/admins/:id/attendance", makeCreateAttendanceHandler("admin"));
 usersManagementRouter.patch(
